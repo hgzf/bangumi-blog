@@ -1039,7 +1039,7 @@
                 </select>
               </template>
               <button class="button small" type="button" @click="generateYearbook">重新评选</button>
-              <button class="button small primary" type="button" :disabled="yearbookExportBusy" @click="exportYearbook">{{ yearbookExportBusy ? "生成长图中…" : "导出长图" }}</button>
+              <button class="button small primary" type="button" :disabled="yearbookExportBusy || !platformCapabilities.yearbookImage" @click="exportYearbook">{{ yearbookExportBusy ? "生成长图中…" : platformCapabilities.yearbookImage ? "导出长图" : "长图不可用" }}</button>
             </div>
           </div>
 
@@ -1586,7 +1586,7 @@
                   <button class="button" type="button" @click="exportBackup">导出全站 JSON</button>
                   <button class="button" type="button" @click="triggerBackupImport">导入 JSON 恢复</button>
                   <button class="button" type="button" @click="exportAllMarkdown">全部长文导出 Markdown</button>
-                  <button class="button" type="button" @click="revealDatabase">打开数据库位置</button>
+                  <button class="button" type="button" :disabled="!platformCapabilities.revealDatabase" @click="revealDatabase">打开数据库位置</button>
                 </div>
                 <p class="notice" style="margin:10px 0 0">导入会以备份内容替换当前本地数据库。建议先导出一次当前版本。数据库路径：{{ databasePath || "正在读取…" }}</p>
                 <input ref="backupInput" class="sr-only" type="file" accept=".json,application/json" @change="handleBackupFile">
@@ -1818,10 +1818,10 @@
           <button class="modal-close" type="button" aria-label="关闭 AI 网页" @click="closeAiWeb">×</button>
         </header>
         <div class="modal-body ai-web-body">
-          <webview v-if="desktopMode && aiWebSrc" :src="aiWebSrc" partition="persist:bgm-ai-web" class="ai-webview" aria-label="AI 网页"></webview>
+          <webview v-if="embeddedAiWeb && aiWebSrc" :src="aiWebSrc" partition="persist:bgm-ai-web" class="ai-webview" aria-label="AI 网页"></webview>
           <div v-else class="empty-state">
-            <strong>{{ desktopMode ? "尚未配置 AI 网页地址" : "浏览器预览模式无法载入 webview" }}</strong>
-            <p>{{ desktopMode ? "请先在系统设置中填写一个 https:// AI 网页地址。" : "请通过 Electron 启动应用后使用此功能。" }}</p>
+            <strong>{{ embeddedAiWeb ? "尚未配置 AI 网页地址" : "当前平台暂不支持内嵌 AI 网页" }}</strong>
+            <p>{{ embeddedAiWeb ? "请先在系统设置中填写一个 https:// AI 网页地址。" : "仍可使用已配置的 AI API 对话；应用内网页将在后续 Android 适配中替换。" }}</p>
             <button class="button" type="button" @click="showAiWeb = false; openSettings()">打开设置</button>
           </div>
         </div>
@@ -1844,6 +1844,11 @@
   <script src="./period-report.js"></script>
   <script src="./watch-session.js"></script>
   <script src="./quarter-report.js"></script>
+  <script src="./platform-contract.js"></script>
+  <script src="./platform/electron-bridge.js"></script>
+  <script src="./platform/mobile-bridge.js"></script>
+  <script src="./platform/browser-bridge.js"></script>
+  <script src="./platform/platform-loader.js"></script>
   <script src="./renderer.js"></script>
 </body>
 </html>

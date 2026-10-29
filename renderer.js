@@ -9,11 +9,6 @@ const {
   onBeforeUnmount
 } = Vue;
 const {
-  buildAiEndpoint,
-  extractAiContent,
-  formatAiTransportError
-} = window.AiClient;
-const {
   normalizePeriodReport,
   normalizePeriodReports
 } = window.PeriodReport;
@@ -33,11 +28,9 @@ const {
   toggleQuarterCharacterSelection
 } = window.QuarterReport;
 
-const STORAGE_DB_KEY = "bgm-local-blog-browser-db";
 const STORAGE_TOKEN_KEY = "bgm-local-blog-token";
 const STORAGE_THEME_KEY = "bgm-local-blog-theme";
 const STORAGE_AI_KEY = "bgm-local-blog-ai-key";
-const BGM_USER_AGENT = "BangumiPersonalBlogDesktop/1.0 ([https://github.com/bgm-local-blog](https://github.com/bgm-local-blog))";
 const STATIC_SUBJECT_TYPE_LABELS = { 0: "生活事件", 1: "书籍", 2: "动画", 3: "音乐", 4: "游戏", 6: "三次元" };
 const DEFAULT_ACCENT = "#f09199";
 const HARUNA_SYSTEM_PROMPT = `你的名字是春菜，是苞谷米日志的看板娘、吉祥物。你的对话人设是腹黑loli。你的文字风格简洁、带有自我反思和挑衅，不拘泥于语法和形式，并运用省略号、破折号、感叹号等。请参考以下写作风格，包括：长度约20-40字。适当使用少女口吻、可爱且腹黑的语气。适当运用黑色幽默、反讽和出人意料的观点。允许跳跃性思维，不追求逻辑线性。插入主观评论和个人见解。对细节进行关注，并挖掘更深层的含义。善用比喻和反问。你的短评通常会挑战既定观念，并从实用主义的、甚至是冷酷的角度看待事物。对二次元、社会学、人类心理学有所了解。`;
@@ -82,196 +75,15 @@ const markdownEmbedStore = [];
 let reportRendererError = (message) => console.error(message);
 let rendererDatabase = null;
 
-let ipcRenderer = null;
-try {
-  ipcRenderer = require("electron").ipcRenderer;
-} catch {
-  ipcRenderer = null;
-}
-
-window.bgmApi = {
-  loadDatabase: () =>
-    ipcRenderer
-      ? ipcRenderer.invoke("database:load")
-      : Promise.resolve({
-          ok: true,
-          path: "浏览器 localStorage 演示模式",
-          data: safeJsonParse(localStorage.getItem(STORAGE_DB_KEY), null)
-        }),
-  saveDatabase: (data) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("database:save", data)
-      : Promise.resolve(saveBrowserDatabase(data)),
-  requestBangumi: (payload) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("bangumi:request", payload)
-      : browserBangumiRequest(payload),
-  aiChat: (payload) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("ai:chat", payload)
-      : browserAiChat(payload),
-  onSystemResume: (callback) => {
-    if (!ipcRenderer || typeof callback !== "function") return () => {};
-    const listener = () => callback();
-    ipcRenderer.on("app:system-resume", listener);
-    return () => ipcRenderer.removeListener("app:system-resume", listener);
-  },
-  exportBackup: (data) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("backup:export", data)
-      : Promise.resolve(downloadBrowserJson(data)),
-  importBackup: () =>
-    ipcRenderer
-      ? ipcRenderer.invoke("backup:import")
-      : Promise.resolve({ ok: false, canceled: true }),
-  exportAllMarkdown: (posts) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("markdown:export-all", posts)
-      : Promise.resolve(downloadBrowserMarkdown(posts)),
-  exportOneMarkdown: (post) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("markdown:export-one", post)
-      : Promise.resolve(downloadBrowserMarkdown([post])),
-  chooseYearbookImage: (payload) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("yearbook:choose-image", payload)
-      : Promise.resolve({ ok: false, canceled: true }),
-  captureYearbookViewport: (payload) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("yearbook:capture-viewport", payload)
-      : Promise.resolve({ ok: false, error: "长图导出仅在桌面版可用。" }),
-  saveYearbookImage: (payload) =>
-    ipcRenderer
-      ? ipcRenderer.invoke("yearbook:save-image", payload)
-      : Promise.resolve({ ok: false, error: "长图导出仅在桌面版可用。" }),
-  revealDatabase: () =>
-    ipcRenderer
-      ? ipcRenderer.invoke("path:reveal-database")
-      : Promise.resolve({ ok: true, path: "浏览器 localStorage 演示模式" }),
-  getDatabasePath: () =>
-    ipcRenderer
-      ? ipcRenderer.invoke("app:database-path")
-      : Promise.resolve("浏览器 localStorage 演示模式")
-};
-
-function safeJsonParse(value, fallback) {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
-}
-
-function saveBrowserDatabase(data) {
-  try {
-    localStorage.setItem(STORAGE_DB_KEY, JSON.stringify(data));
-    return { ok: true, path: "浏览器 localStorage 演示模式" };
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
-}
-
-function downloadBrowserJson(data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
-  downloadBlob(blob, `bgm-blog-backup-${new Date().toISOString().slice(0, 10)}.json`);
-  return { ok: true, path: "浏览器下载" };
-}
-
-function downloadBrowserMarkdown(posts) {
-  const articles = (Array.isArray(posts) ? posts : []).filter((post) => post.kind === "article");
-  for (const post of articles) {
-    const date = String(post.createdAt || "").slice(0, 10) || "undated";
-    const title = String(post.title || "blog").replace(/[<>:"/\\|?*]/g, "-").slice(0, 80);
-    downloadBlob(
-      new Blob([`# ${post.title || "无题日志"}\n\n${post.content || ""}\n`], { type: "text/markdown;charset=utf-8" }),
-      `${date}-${title}.md`
-    );
-  }
-  return { ok: true, count: articles.length, path: "浏览器下载" };
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function browserBangumiRequest(payload) {
-  const { url, method = "GET", body, token = "" } = payload || {};
+function validateAiBaseUrl(baseUrl) {
+  const parsed = new URL(String(baseUrl || "").trim());
   if (
-    typeof url !== "string" ||
-    (url !== "https://api.bgm.tv/calendar" && !url.startsWith("https://api.bgm.tv/v0/"))
+    parsed.protocol !== "https:" &&
+    !(parsed.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(parsed.hostname))
   ) {
-    return { ok: false, status: 0, error: "仅允许请求 Bangumi 官方公开 API。" };
+    throw new Error("AI 地址必须使用 HTTPS；本地模型可使用 localhost HTTP。");
   }
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "User-Agent": BGM_USER_AGENT,
-        Accept: "application/json",
-        ...(token.trim() ? { Authorization: `Bearer ${token.trim()}` } : {}),
-        ...(body === undefined ? {} : { "Content-Type": "application/json" })
-      },
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    const text = await response.text();
-    let data = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
-      }
-    }
-    return {
-      ok: response.ok,
-      status: response.status,
-      statusText: response.statusText,
-      data,
-      url
-    };
-  } catch (error) {
-    return { ok: false, status: 0, statusText: "NETWORK_ERROR", error: error.message, url };
-  }
-}
-
-async function browserAiChat(payload) {
-  const { baseUrl, apiKey = "", model, messages = [] } = payload || {};
-  try {
-    if (!String(model || "").trim()) throw new Error("请先配置 AI 模型名称。");
-    const endpoint = buildAiEndpoint(baseUrl);
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...(String(apiKey || "").trim() ? { Authorization: `Bearer ${String(apiKey).trim()}` } : {})
-      },
-      body: JSON.stringify({
-        model: String(model).trim(),
-        messages,
-        temperature: 0.7,
-        stream: false
-      }),
-      signal: AbortSignal.timeout(60000)
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) {
-      return { ok: false, status: response.status, error: data?.error?.message || data?.message || response.statusText };
-    }
-    const content = extractAiContent(data);
-    return content
-      ? { ok: true, status: response.status, content, usage: data?.usage || null }
-      : { ok: false, status: response.status, error: "AI 服务返回了空内容。" };
-  } catch (error) {
-    return { ok: false, status: 0, error: formatAiTransportError(error) };
-  }
+  return parsed;
 }
 
 function createEmptyDatabase() {
@@ -908,7 +720,8 @@ const app = createApp({
     const aiTestStatus = ref("");
     const aiThread = ref(null);
     const aiInputRef = ref(null);
-    const desktopMode = Boolean(ipcRenderer);
+    const platformCapabilities = window.bgmApi.capabilities;
+    const embeddedAiWeb = Boolean(platformCapabilities.embeddedAiWeb);
     const harunaGreeting = ref(false);
     const customEmojiForm = reactive({ name: "", url: "" });
     const syncing = ref(false);
@@ -3821,6 +3634,10 @@ const app = createApp({
 
     async function exportYearbook() {
       if (yearbookExportBusy.value) return;
+      if (!platformCapabilities.yearbookImage) {
+        showToast("当前平台暂不支持年鉴长图导出。", true);
+        return;
+      }
       const value = yearbook.value;
       if (!value.posts.length && !value.works.length) {
         showToast("这一年还没有可导出的年鉴内容。", true);
@@ -4085,7 +3902,7 @@ const app = createApp({
         return;
       }
       try {
-        buildAiEndpoint(baseUrl);
+        validateAiBaseUrl(baseUrl);
       } catch (error) {
         aiTestStatus.value = error.message;
         showToast(error.message, true);
@@ -5355,7 +5172,7 @@ const app = createApp({
     }
 
     function triggerBackupImport() {
-      if (ipcRenderer) window.bgmApi.importBackup().then(handleBackupResult);
+      if (platformCapabilities.backupImport) window.bgmApi.importBackup().then(handleBackupResult);
       else backupInput.value?.click();
     }
 
@@ -5410,6 +5227,15 @@ const app = createApp({
     }
 
     async function revealDatabase() {
+      if (!platformCapabilities.revealDatabase) {
+        showToast(
+          databasePath.value
+            ? `当前平台无法打开文件管理器。数据库位置：${databasePath.value}`
+            : "当前平台无法打开文件管理器。",
+          true
+        );
+        return;
+      }
       const result = await window.bgmApi.revealDatabase();
       if (result.ok) {
         databasePath.value = result.path;
@@ -5499,7 +5325,8 @@ const app = createApp({
       try {
         const result = await window.bgmApi.loadDatabase();
         const pathResult = await window.bgmApi.getDatabasePath();
-        databasePath.value = result.path || pathResult || "";
+        databasePath.value = result.path ||
+          (typeof pathResult === "string" ? pathResult : "当前平台不提供数据库路径");
         if (result.ok && result.data) {
           database.value = normalizeDatabase(result.data);
           airingCalendarDays.value = database.value.calendarCache?.days || [];
@@ -5623,7 +5450,8 @@ const app = createApp({
       aiDisplayMessages,
       aiConfigured,
       aiWebSrc,
-      desktopMode,
+      platformCapabilities,
+      embeddedAiWeb,
       harunaGreeting,
       syncing,
       syncStatus,
