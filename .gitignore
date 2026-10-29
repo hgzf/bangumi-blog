@@ -1,0 +1,53 @@
+# Dependencies and generated builds
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+*.tmp
+*.bak
+*.old
+
+# Local diagnostics and screenshots that may contain personal records
+.taste-skill/
+.smoke-*/
+.verify-*/
+.icon-build-temp/
+
+# Secrets and local credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+keystore.properties
+
+# Local databases and exported personal data
+bgm_blog_database.json
+**/bgm_blog_database.json
+*.sqlite
+*.sqlite3
+
+# Electron and Android build artifacts
+*.log
+*.apk
+*.aab
+*.zip
+release/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Local shortcuts and IDE state
+*.lnk
+.vscode/
+.idea/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
