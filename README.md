@@ -21,6 +21,8 @@ Windows 本地使用可以在依赖安装完成后双击 `启动苞谷米日志.
 
 ```powershell
 pnpm run build:css
+pnpm build:web
+pnpm check:web
 pnpm test
 ```
 

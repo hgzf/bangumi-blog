@@ -6,6 +6,8 @@
   "private": true,
   "scripts": {
     "build:css": "tailwindcss -i ./tailwind.input.css -o ./styles.css --minify",
+    "build:web": "pnpm run build:css && node scripts/build-web.mjs",
+    "check:web": "node scripts/check-web-build.mjs",
     "test": "node --test tests/*.test.js",
     "start": "tailwindcss -i ./tailwind.input.css -o ./styles.css --minify && electron .",
     "start:fast": "electron ."

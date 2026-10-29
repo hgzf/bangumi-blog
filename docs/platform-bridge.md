@@ -19,6 +19,29 @@ window.bgmApi.capabilities
 window.bgmApi.secureStorage
 ```
 
+## Web build
+
+Build the Capacitor-ready web artifact with:
+
+```powershell
+pnpm build:web
+pnpm check:web
+```
+
+The build writes only an explicit runtime allowlist to `dist/`. Browser
+dependencies are copied to `dist/vendor/`, and all `node_modules` references in
+`index.html` are rewritten before the build is accepted.
+
+`dist/` is generated output and must not be committed. Capacitor will use:
+
+```js
+webDir: "dist"
+```
+
+The validator checks required files, relative asset resolution, forbidden local
+data and key files, absolute paths, empty text files, and the 2 MB size budget.
+It can be run independently with `pnpm check:web`.
+
 ## Required methods
 
 - `loadDatabase`
