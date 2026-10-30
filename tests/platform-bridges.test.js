@@ -77,6 +77,51 @@ test("android adapter reads and writes the database through Filesystem", async (
   assert.equal(writes[0].path, "bgm_blog_database.json");
 });
 
+test("android adapter requests the official Bangumi API through CapacitorHttp", async () => {
+  global.PlatformContract = contract;
+  global.Capacitor = { getPlatform: () => "android", isNativePlatform: () => true };
+  const requests = [];
+  global.PlatformMobileNative = {
+    Capacitor: global.Capacitor,
+    CapacitorHttp: {
+      request: async (options) => {
+        requests.push(options);
+        return {
+          status: 200,
+          headers: { "content-type": "application/json" },
+          url: options.url,
+          data: { id: 1, name: "测试条目" }
+        };
+      }
+    }
+  };
+  loadFresh("../platform/mobile-bridge");
+
+  const adapter = global.PlatformMobileBridge.create();
+  const response = await adapter.requestBangumi({
+    url: "https://api.bgm.tv/v0/subjects/1",
+    token: " token-value "
+  });
+  const rejected = await adapter.requestBangumi({
+    url: "https://example.com/private"
+  });
+
+  assert.equal(adapter.capabilities.bangumi, true);
+  assert.deepEqual(response, {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    data: { id: 1, name: "测试条目" },
+    url: "https://api.bgm.tv/v0/subjects/1"
+  });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, "GET");
+  assert.equal(requests[0].headers.Authorization, "Bearer token-value");
+  assert.equal(requests[0].connectTimeout, 15000);
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.error, /仅允许请求 Bangumi 官方公开 API/);
+});
+
 test("platform loader selects the first available real adapter", () => {
   global.PlatformContract = contract;
   const mobile = contract.createAdapter({ platform: "android", methods: {} });

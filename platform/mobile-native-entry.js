@@ -1,4 +1,4 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import {
   Directory,
   Encoding,
@@ -7,6 +7,7 @@ import {
 
 globalThis.PlatformMobileNative = {
   Capacitor,
+  CapacitorHttp,
   Directory,
   Encoding,
   Filesystem

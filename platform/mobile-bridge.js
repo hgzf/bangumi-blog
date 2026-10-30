@@ -1,5 +1,6 @@
 (function initMobileBridge(root) {
   const DB_FILE = "bgm_blog_database.json";
+  const BGM_USER_AGENT = "BangumiPersonalBlogDesktop/1.0 ([https://github.com/bgm-local-blog](https://github.com/bgm-local-blog))";
 
   function isAvailable() {
     const capacitor = root.Capacitor;
@@ -81,17 +82,79 @@
     }
   }
 
+  function getBangumiHeaders(token) {
+    return {
+      "User-Agent": BGM_USER_AGENT,
+      Accept: "application/json",
+      ...(String(token || "").trim()
+        ? { Authorization: `Bearer ${String(token).trim()}` }
+        : {})
+    };
+  }
+
+  async function requestBangumi(payload) {
+    const { url, method = "GET", body, token = "" } = payload || {};
+    if (
+      typeof url !== "string" ||
+      (url !== "https://api.bgm.tv/calendar" && !url.startsWith("https://api.bgm.tv/v0/"))
+    ) {
+      return { ok: false, status: 0, error: "仅允许请求 Bangumi 官方公开 API。" };
+    }
+
+    const http = nativeBridge()?.CapacitorHttp;
+    if (!http?.request) {
+      return {
+        ok: false,
+        status: 0,
+        unsupported: true,
+        error: "当前平台暂不支持 requestBangumi。"
+      };
+    }
+
+    const headers = getBangumiHeaders(token);
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    try {
+      const response = await http.request({
+        url,
+        method,
+        headers,
+        ...(body === undefined ? {} : { data: body }),
+        connectTimeout: 15000,
+        readTimeout: 30000
+      });
+      const status = Number(response.status) || 0;
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        statusText: status >= 200 && status < 300 ? "OK" : "HTTP_ERROR",
+        data: response.data ?? null,
+        url
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        status: 0,
+        statusText: "NETWORK_ERROR",
+        error: error?.message || "Bangumi 请求失败。",
+        url
+      };
+    }
+  }
+
   function create() {
     const hasFilesystem = Boolean(nativeBridge()?.Filesystem);
+    const hasBangumiHttp = Boolean(nativeBridge()?.CapacitorHttp?.request);
     return root.PlatformContract.createAdapter({
       platform: "android",
       label: "Android",
       capabilities: {
-        database: hasFilesystem
+        database: hasFilesystem,
+        bangumi: hasBangumiHttp
       },
       methods: {
         loadDatabase,
         saveDatabase,
+        requestBangumi,
         getDatabasePath: async () => databasePathLabel()
       }
     });
