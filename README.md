@@ -60,6 +60,14 @@ Windows 上的 Android Gradle Plugin 不支持中文项目路径。构建 Androi
 adb install -r .\android\app\build\outputs\apk\release\app-release.apk
 ```
 
+如需从桌面端一次性迁移全部日志、收藏和评价，可以先导出 JSON，再把它作为仅本机使用的迁移种子构建：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-android-release.ps1 -MigrationSeed "C:\path\to\bgm-blog-backup.json"
+```
+
+种子只会在 Android 应用第一次启动时写入本地数据库，之后不会覆盖新记录。包含个人数据的 APK 仅适合自行安装，不应上传或公开分发。
+
 ## 主要功能
 
 - 即时博客、番组档案、站内作品详情、周月记和年度年鉴五个主视图；长文直接在即时博客中阅读，不再占用独立导航栏。

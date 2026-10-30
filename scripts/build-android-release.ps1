@@ -1,5 +1,6 @@
 param(
-  [string]$ProjectRoot = $env:BGM_BLOG_PROJECT_ROOT
+  [string]$ProjectRoot = $env:BGM_BLOG_PROJECT_ROOT,
+  [string]$MigrationSeed = $env:BGM_BLOG_MOBILE_SEED
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,6 +65,13 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "CSS build failed." }
   & $node.Source "scripts\build-web.mjs"
   if ($LASTEXITCODE -ne 0) { throw "Web build failed." }
+  if ($MigrationSeed) {
+    $migrationSeedPath = [IO.Path]::GetFullPath($MigrationSeed)
+    if (!(Test-Path -LiteralPath $migrationSeedPath)) {
+      throw "Migration seed was not found: $migrationSeedPath"
+    }
+    Copy-Item -LiteralPath $migrationSeedPath -Destination (Join-Path $projectRoot "dist\mobile-seed.json") -Force
+  }
   & $node.Source "node_modules\@capacitor\cli\bin\capacitor" sync android
   if ($LASTEXITCODE -ne 0) { throw "Capacitor sync failed." }
 

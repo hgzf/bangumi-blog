@@ -1,5 +1,6 @@
 (function initMobileBridge(root) {
   const DB_FILE = "bgm_blog_database.json";
+  const SEED_MARKER_FILE = "mobile-seed-applied.txt";
   const BGM_USER_AGENT = "BangumiPersonalBlogDesktop/1.0 ([https://github.com/bgm-local-blog](https://github.com/bgm-local-blog))";
 
   function isAvailable() {
@@ -27,6 +28,48 @@
       /(?:file|directory).*(?:not|does not).*exist|找不到/i.test(message);
   }
 
+  async function loadDatabaseSeed() {
+    if (typeof root.fetch !== "function") return null;
+    try {
+      const response = await root.fetch("mobile-seed.json", { cache: "no-store" });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
+  async function applyDatabaseSeed(native) {
+    try {
+      await native.Filesystem.readFile({
+        path: SEED_MARKER_FILE,
+        directory: native.Directory.Data,
+        encoding: native.Encoding.UTF8
+      });
+      return null;
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+
+    const seed = await loadDatabaseSeed();
+    if (!seed) return null;
+    await native.Filesystem.writeFile({
+      path: DB_FILE,
+      data: JSON.stringify(seed),
+      directory: native.Directory.Data,
+      encoding: native.Encoding.UTF8,
+      recursive: true
+    });
+    await native.Filesystem.writeFile({
+      path: SEED_MARKER_FILE,
+      data: new Date().toISOString(),
+      directory: native.Directory.Data,
+      encoding: native.Encoding.UTF8,
+      recursive: true
+    });
+    return seed;
+  }
+
   async function loadDatabase() {
     const native = nativeBridge();
     if (!native?.Filesystem) {
@@ -36,21 +79,27 @@
         error: "当前平台暂不支持 loadDatabase。"
       };
     }
+    let existing = null;
     try {
       const result = await native.Filesystem.readFile({
         path: DB_FILE,
         directory: native.Directory.Data,
         encoding: native.Encoding.UTF8
       });
+      existing = JSON.parse(String(result.data || "null"));
+    } catch (error) {
+      if (!isNotFound(error)) {
+        return { ok: false, path: databasePathLabel(), error: error.message };
+      }
+    }
+    try {
+      const seed = await applyDatabaseSeed(native);
       return {
         ok: true,
         path: databasePathLabel(),
-        data: JSON.parse(String(result.data || "null"))
+        data: seed || existing
       };
     } catch (error) {
-      if (isNotFound(error)) {
-        return { ok: true, path: databasePathLabel(), data: null };
-      }
       return { ok: false, path: databasePathLabel(), error: error.message };
     }
   }

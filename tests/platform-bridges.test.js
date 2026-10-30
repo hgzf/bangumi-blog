@@ -77,6 +77,104 @@ test("android adapter reads and writes the database through Filesystem", async (
   assert.equal(writes[0].path, "bgm_blog_database.json");
 });
 
+test("android adapter seeds a first-run database from the bundled migration asset", async () => {
+  global.PlatformContract = contract;
+  global.Capacitor = { getPlatform: () => "android", isNativePlatform: () => true };
+  const writes = [];
+  global.PlatformMobileNative = {
+    Capacitor: global.Capacitor,
+    Directory: { Data: "DATA" },
+    Encoding: { UTF8: "utf8" },
+    Filesystem: {
+      readFile: async () => {
+        const error = new Error("File does not exist");
+        error.code = "NOT_FOUND";
+        throw error;
+      },
+      writeFile: async (options) => {
+        writes.push(options);
+        return { uri: "file:///data/bgm_blog_database.json" };
+      }
+    }
+  };
+  const seed = { posts: [{ id: "post-1", content: "迁移日志" }], collections: [{ bangumiId: 1 }] };
+  const previousFetch = global.fetch;
+  global.fetch = async (url) => {
+    assert.equal(url, "mobile-seed.json");
+    return { ok: true, json: async () => seed };
+  };
+  loadFresh("../platform/mobile-bridge");
+
+  try {
+    const adapter = global.PlatformMobileBridge.create();
+    const loaded = await adapter.loadDatabase();
+
+    assert.deepEqual(loaded, {
+      ok: true,
+      path: "应用私有目录/bgm_blog_database.json",
+      data: seed
+    });
+    assert.equal(writes.length, 2);
+    const databaseWrite = writes.find((entry) => entry.path === "bgm_blog_database.json");
+    const markerWrite = writes.find((entry) => entry.path === "mobile-seed-applied.txt");
+    assert.deepEqual(JSON.parse(databaseWrite.data), seed);
+    assert.ok(markerWrite.data);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("android seed migration updates an existing empty database exactly once", async () => {
+  global.PlatformContract = contract;
+  global.Capacitor = { getPlatform: () => "android", isNativePlatform: () => true };
+  const existing = { posts: [], collections: [] };
+  const writes = [];
+  let markerApplied = false;
+  global.PlatformMobileNative = {
+    Capacitor: global.Capacitor,
+    Directory: { Data: "DATA" },
+    Encoding: { UTF8: "utf8" },
+    Filesystem: {
+      readFile: async ({ path }) => {
+        if (path === "bgm_blog_database.json") {
+          return { data: JSON.stringify(existing) };
+        }
+        if (path === "mobile-seed-applied.txt" && markerApplied) {
+          return { data: "2026-10-30T00:00:00.000Z" };
+        }
+        const error = new Error("File does not exist");
+        error.code = "NOT_FOUND";
+        throw error;
+      },
+      writeFile: async (options) => {
+        writes.push(options);
+        if (options.path === "mobile-seed-applied.txt") markerApplied = true;
+        return { uri: `file:///data/${options.path}` };
+      }
+    }
+  };
+  const seed = { posts: [{ id: "migrated-post" }], collections: [{ bangumiId: 2 }] };
+  const previousFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, json: async () => seed });
+  loadFresh("../platform/mobile-bridge");
+
+  try {
+    const adapter = global.PlatformMobileBridge.create();
+    const migrated = await adapter.loadDatabase();
+    global.fetch = async () => {
+      throw new Error("Seed must not be fetched after migration.");
+    };
+    const subsequent = await adapter.loadDatabase();
+
+    assert.deepEqual(migrated.data, seed);
+    assert.deepEqual(subsequent.data, existing);
+    assert.equal(writes.filter((entry) => entry.path === "bgm_blog_database.json").length, 1);
+    assert.equal(writes.filter((entry) => entry.path === "mobile-seed-applied.txt").length, 1);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test("android adapter requests the official Bangumi API through CapacitorHttp", async () => {
   global.PlatformContract = contract;
   global.Capacitor = { getPlatform: () => "android", isNativePlatform: () => true };
