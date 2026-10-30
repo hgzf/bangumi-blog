@@ -34,7 +34,31 @@ pnpm test
 
 日志、收藏、图片和生成的报告默认只保存在本机。使用 Bangumi 同步或春菜 AI 时，相应请求会发送到用户配置的服务；详细说明见 [SECURITY.md](SECURITY.md)。
 
-桌面、浏览器预览和未来 Android 端通过 [平台桥接契约](docs/platform-bridge.md) 共用页面代码。
+桌面、浏览器预览和 Android 端通过 [平台桥接契约](docs/platform-bridge.md) 共用页面代码。
+
+## Android 安装包
+
+Android 客户端使用 Capacitor 包装同一套 Web 界面，应用 ID 为 `io.github.hgzf.bgmblog`，数据保存在应用私有目录的 `bgm_blog_database.json`。
+
+正式版需要 JDK 21、Android SDK Platform 36 和 Node.js。安装依赖后，从仓库根目录运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-android-release.ps1
+```
+
+脚本会构建 Web 资源、执行 Capacitor 同步并输出：
+
+```text
+android\app\build\outputs\apk\release\app-release.apk
+```
+
+Windows 上的 Android Gradle Plugin 不支持中文项目路径。构建 Android 版时，请把仓库放在类似 `C:\Projects\bgm-local-blog` 的纯 ASCII 路径下。正式签名密钥和 DPAPI 加密密码保存在仓库外，不会提交到 Git，也不应重新生成，否则新 APK 无法覆盖安装旧版本。
+
+连接 Android 设备后可安装：
+
+```powershell
+adb install -r .\android\app\build\outputs\apk\release\app-release.apk
+```
 
 ## 主要功能
 

@@ -38,6 +38,45 @@ test("android placeholder adapter loads with all native capabilities disabled", 
   assert.equal(contract.validateAdapter(adapter), true);
 });
 
+test("android adapter reads and writes the database through Filesystem", async () => {
+  global.PlatformContract = contract;
+  global.Capacitor = { getPlatform: () => "android", isNativePlatform: () => true };
+  const writes = [];
+  global.PlatformMobileNative = {
+    Capacitor: global.Capacitor,
+    Directory: { Data: "DATA" },
+    Encoding: { UTF8: "utf8" },
+    Filesystem: {
+      readFile: async () => {
+        const error = new Error("File does not exist");
+        error.code = "NOT_FOUND";
+        throw error;
+      },
+      writeFile: async (options) => {
+        writes.push(options);
+        return { uri: "file:///data/bgm_blog_database.json" };
+      }
+    }
+  };
+  loadFresh("../platform/mobile-bridge");
+
+  const adapter = global.PlatformMobileBridge.create();
+  const loaded = await adapter.loadDatabase();
+  const saved = await adapter.saveDatabase({ posts: [] });
+
+  assert.equal(adapter.capabilities.database, true);
+  assert.deepEqual(loaded, {
+    ok: true,
+    path: "应用私有目录/bgm_blog_database.json",
+    data: null
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].directory, "DATA");
+  assert.equal(writes[0].encoding, "utf8");
+  assert.equal(writes[0].path, "bgm_blog_database.json");
+});
+
 test("platform loader selects the first available real adapter", () => {
   global.PlatformContract = contract;
   const mobile = contract.createAdapter({ platform: "android", methods: {} });

@@ -25,6 +25,7 @@ test("vendor path rewriting removes node_modules and rejects unknown references"
   assert.doesNotMatch(rewritten, /node_modules/);
   assert.match(rewritten, /\.\/vendor\/vue\.global\.prod\.js/);
   assert.match(rewritten, /\.\/vendor\/highlight\.min\.js/);
+  assert.match(rewritten, /\.\/vendor\/mobile-native\.bundle\.js/);
   assert.throws(
     () => rewriteVendorPaths('<script src="./node_modules/unknown/file.js"></script>'),
     /Unresolved node_modules reference/
@@ -42,6 +43,7 @@ test("web build contains runtime files and passes security validation", async ()
     assert.doesNotMatch(index, /node_modules/);
     assert.match(await readFile(join(outDir, "renderer.js"), "utf8"), /createApp/);
     assert.match(await readFile(join(outDir, "platform", "platform-loader.js"), "utf8"), /bgmApi/);
+    assert.ok((await readFile(join(outDir, "vendor", "mobile-native.bundle.js"))).length > 1000);
     assert.equal(await validateWebBuild(outDir), true);
   } finally {
     await rm(outDir, { recursive: true, force: true });

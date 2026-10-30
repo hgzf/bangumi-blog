@@ -8,6 +8,7 @@ import {
   writeFile
 } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { build as esbuildBuild } from "esbuild";
 
 export const VENDOR_FILES = Object.freeze([
   {
@@ -56,7 +57,8 @@ export const RUNTIME_FILES = Object.freeze([
 
 export const REQUIRED_DIST_FILES = Object.freeze([
   ...RUNTIME_FILES,
-  ...VENDOR_FILES.map((entry) => entry.target)
+  ...VENDOR_FILES.map((entry) => entry.target),
+  "vendor/mobile-native.bundle.js"
 ]);
 
 const VENDOR_REPLACEMENTS = new Map([
@@ -96,6 +98,20 @@ export function rewriteVendorPaths(html) {
   if (result.includes("node_modules")) {
     const reference = result.match(/[^"'\s]*node_modules[^"'\s]*/)?.[0] || "node_modules";
     throw new Error(`Unresolved node_modules reference: ${reference}`);
+  }
+  const mobileBundleTag = '<script src="./vendor/mobile-native.bundle.js"></script>';
+  if (!result.includes(mobileBundleTag)) {
+    const mobileBridgeTag = '<script src="./platform/mobile-bridge.js"></script>';
+    if (result.includes(mobileBridgeTag)) {
+      result = result.replace(
+        mobileBridgeTag,
+        `${mobileBridgeTag}\n  ${mobileBundleTag}`
+      );
+    } else if (result.includes("</body>")) {
+      result = result.replace("</body>", `  ${mobileBundleTag}\n</body>`);
+    } else {
+      result += `\n${mobileBundleTag}`;
+    }
   }
   return result;
 }
@@ -138,6 +154,18 @@ export async function buildWeb({
     await mkdir(dirname(target), { recursive: true });
     await copyFile(join(resolvedRoot, vendor.source), target);
   }
+
+  await esbuildBuild({
+    entryPoints: [join(resolvedRoot, "platform", "mobile-native-entry.js")],
+    outfile: join(resolvedOut, "vendor", "mobile-native.bundle.js"),
+    bundle: true,
+    minify: true,
+    format: "iife",
+    platform: "browser",
+    target: ["es2020"],
+    legalComments: "none",
+    logLevel: "silent"
+  });
 
   const index = await readFile(join(resolvedRoot, "index.html"), "utf8");
   await writeFile(join(resolvedOut, "index.html"), rewriteVendorPaths(index), "utf8");

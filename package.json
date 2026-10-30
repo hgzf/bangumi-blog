@@ -13,14 +13,20 @@
     "start:fast": "electron ."
   },
   "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/filesystem": "8.1.5",
     "@highlightjs/cdn-assets": "^11.11.1",
     "dompurify": "^3.2.4",
     "marked": "^15.0.7",
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.6.0",
     "autoprefixer": "^10.4.20",
     "electron": "^45.1.0",
+    "esbuild": "^0.28.2",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17"
   }
