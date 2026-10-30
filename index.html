@@ -1603,6 +1603,23 @@
                 <p class="panel-title-note" style="margin:7px 0 0">已同步 {{ database.collections.length }} 部作品；可导入 {{ importableCollectionCount }} 条。</p>
               </div>
             </section>
+
+            <section v-if="folderSyncSupported" class="setting-row">
+              <div class="setting-copy">
+                <h3>文件夹同步（Syncthing）</h3>
+                <p>电脑和 Android 各写一个设备快照，再由 Syncthing 传输。两端修改会按记录合并，不直接覆盖整个数据库。</p>
+              </div>
+              <div class="setting-panel">
+                <div class="setting-actions">
+                  <button class="button primary" type="button" :disabled="folderSyncState.busy" @click="chooseFolderSyncFolder">选择同步文件夹</button>
+                  <button class="button accent" type="button" :disabled="folderSyncState.busy || !folderSyncState.configured" @click="syncFolderNow()">{{ folderSyncState.busy ? "同步中…" : "立即合并" }}</button>
+                  <button class="button" type="button" :disabled="!folderSyncState.configured" @click="openFolderSyncFolder">打开目录</button>
+                </div>
+                <p class="panel-title-note" style="margin:7px 0 0">{{ folderSyncState.text }}</p>
+                <p v-if="folderSyncState.folderPath" class="notice" style="margin:7px 0 0">目录：{{ folderSyncState.folderPath }}</p>
+                <p class="notice" style="margin:7px 0 0">请让 Syncthing 在电脑和 Android 上同步同一个文件夹。不要同时选择网盘自动替换同一个 JSON 文件。</p>
+              </div>
+            </section>
           </div>
         </div>
         <footer class="modal-footer">
@@ -1844,6 +1861,7 @@
   <script src="./period-report.js"></script>
   <script src="./watch-session.js"></script>
   <script src="./quarter-report.js"></script>
+  <script src="./folder-sync.js"></script>
   <script src="./platform-contract.js"></script>
   <script src="./platform/electron-bridge.js"></script>
   <script src="./platform/mobile-bridge.js"></script>

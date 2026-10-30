@@ -29,7 +29,8 @@
         embeddedAiWeb: true,
         systemResume: true,
         revealDatabase: true,
-        secureStorage: false
+        secureStorage: false,
+        folderSync: true
       },
       methods: {
         loadDatabase: () => ipcRenderer.invoke("database:load"),
@@ -50,7 +51,12 @@
         captureYearbookViewport: (payload) => ipcRenderer.invoke("yearbook:capture-viewport", payload),
         saveYearbookImage: (payload) => ipcRenderer.invoke("yearbook:save-image", payload),
         revealDatabase: () => ipcRenderer.invoke("path:reveal-database"),
-        getDatabasePath: () => ipcRenderer.invoke("app:database-path")
+        getDatabasePath: () => ipcRenderer.invoke("app:database-path"),
+        getFolderSyncInfo: () => ipcRenderer.invoke("folder-sync:info"),
+        chooseFolderSyncFolder: () => ipcRenderer.invoke("folder-sync:choose-folder"),
+        readFolderSyncSnapshots: () => ipcRenderer.invoke("folder-sync:read-snapshots"),
+        writeFolderSyncSnapshot: (payload) => ipcRenderer.invoke("folder-sync:write-snapshot", payload),
+        openFolderSyncFolder: () => ipcRenderer.invoke("folder-sync:open-folder")
       },
       secureStorage: {
         get: async (key) => localStorage.getItem(key),

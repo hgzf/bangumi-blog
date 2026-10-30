@@ -8,6 +8,9 @@ const {
 } = require("./ai-client");
 
 const DB_FILE = "bgm_blog_database.json";
+const FOLDER_SYNC_CONFIG_FILE = "folder-sync.json";
+const FOLDER_SYNC_FILE_PATTERN = /^bgm-blog-sync-[a-z0-9-]{6,80}\.json$/i;
+const FOLDER_SYNC_MAX_FILE_BYTES = 64 * 1024 * 1024;
 const APP_ICON = path.join(__dirname, "assets", "app-icon.ico");
 const smokeTest = process.env.BGM_BLOG_SMOKE_TEST === "1";
 app.setAppUserModelId("com.bgmlog.personal-blog");
@@ -30,6 +33,117 @@ if (!singleInstanceLock) {
 
 function databasePath() {
   return path.join(app.getPath("userData"), DB_FILE);
+}
+
+function folderSyncConfigPath() {
+  return path.join(app.getPath("userData"), FOLDER_SYNC_CONFIG_FILE);
+}
+
+function defaultFolderSyncPath() {
+  return path.join(app.getPath("documents"), "BGM Blog Sync");
+}
+
+async function readFolderSyncConfig() {
+  try {
+    const raw = await fs.readFile(folderSyncConfigPath(), "utf8");
+    const data = JSON.parse(raw);
+    return {
+      configured: Boolean(data?.folderPath),
+      folderPath: data?.folderPath ? path.resolve(data.folderPath) : defaultFolderSyncPath()
+    };
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    return { configured: false, folderPath: defaultFolderSyncPath() };
+  }
+}
+
+async function saveFolderSyncConfig(folderPath) {
+  await atomicWriteJson(folderSyncConfigPath(), { folderPath });
+}
+
+async function getFolderSyncInfo() {
+  try {
+    const config = await readFolderSyncConfig();
+    return { ok: true, ...config };
+  } catch (error) {
+    return { ok: false, supported: true, error: error.message };
+  }
+}
+
+async function chooseFolderSyncFolder() {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "选择 Syncthing 同步文件夹",
+    defaultPath: (await readFolderSyncConfig()).folderPath,
+    properties: ["openDirectory", "createDirectory"]
+  });
+  if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+  const folderPath = path.resolve(result.filePaths[0]);
+  try {
+    await fs.mkdir(folderPath, { recursive: true });
+    await saveFolderSyncConfig(folderPath);
+    return { ok: true, configured: true, folderPath };
+  } catch (error) {
+    return { ok: false, supported: true, error: error.message };
+  }
+}
+
+async function readFolderSyncSnapshots() {
+  try {
+    const config = await readFolderSyncConfig();
+    if (!config.configured) {
+      return { ok: false, configured: false, folderPath: config.folderPath, error: "尚未选择同步文件夹。" };
+    }
+    await fs.mkdir(config.folderPath, { recursive: true });
+    const entries = await fs.readdir(config.folderPath, { withFileTypes: true });
+    const snapshots = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !FOLDER_SYNC_FILE_PATTERN.test(entry.name)) continue;
+      const filePath = path.join(config.folderPath, entry.name);
+      const info = await fs.stat(filePath);
+      if (!info.size || info.size > FOLDER_SYNC_MAX_FILE_BYTES) continue;
+      try {
+        const raw = await fs.readFile(filePath, "utf8");
+        snapshots.push({ name: entry.name, data: JSON.parse(raw) });
+      } catch {
+        // Ignore an incomplete file while Syncthing is still transferring it.
+      }
+      if (snapshots.length >= 24) break;
+    }
+    return { ok: true, configured: true, folderPath: config.folderPath, snapshots };
+  } catch (error) {
+    return { ok: false, supported: true, error: error.message };
+  }
+}
+
+async function writeFolderSyncSnapshot(payload) {
+  const { filename, data } = payload || {};
+  if (!FOLDER_SYNC_FILE_PATTERN.test(String(filename || ""))) {
+    return { ok: false, supported: true, error: "同步快照文件名无效。" };
+  }
+  try {
+    const config = await readFolderSyncConfig();
+    if (!config.configured) {
+      return { ok: false, configured: false, folderPath: config.folderPath, error: "尚未选择同步文件夹。" };
+    }
+    await fs.mkdir(config.folderPath, { recursive: true });
+    const target = path.join(config.folderPath, filename);
+    await atomicWriteJson(target, data);
+    return { ok: true, configured: true, folderPath: config.folderPath, path: target };
+  } catch (error) {
+    return { ok: false, supported: true, error: error.message };
+  }
+}
+
+async function openFolderSyncFolder() {
+  try {
+    const config = await readFolderSyncConfig();
+    await fs.mkdir(config.folderPath, { recursive: true });
+    const error = await shell.openPath(config.folderPath);
+    if (error) throw new Error(error);
+    return { ok: true, folderPath: config.folderPath };
+  } catch (error) {
+    return { ok: false, supported: true, error: error.message };
+  }
 }
 
 async function readDatabase() {
@@ -546,3 +660,8 @@ ipcMain.handle("path:reveal-database", async () => {
 });
 
 ipcMain.handle("app:database-path", () => databasePath());
+ipcMain.handle("folder-sync:info", getFolderSyncInfo);
+ipcMain.handle("folder-sync:choose-folder", chooseFolderSyncFolder);
+ipcMain.handle("folder-sync:read-snapshots", readFolderSyncSnapshots);
+ipcMain.handle("folder-sync:write-snapshot", (_event, payload) => writeFolderSyncSnapshot(payload));
+ipcMain.handle("folder-sync:open-folder", openFolderSyncFolder);

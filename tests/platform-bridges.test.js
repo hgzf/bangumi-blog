@@ -220,6 +220,52 @@ test("android adapter requests the official Bangumi API through CapacitorHttp", 
   assert.match(rejected.error, /仅允许请求 Bangumi 官方公开 API/);
 });
 
+test("android adapter exposes SAF folder snapshots for Syncthing", async () => {
+  global.PlatformContract = contract;
+  global.Capacitor = { getPlatform: () => "android", isNativePlatform: () => true };
+  const writes = [];
+  global.PlatformMobileNative = {
+    Capacitor: global.Capacitor,
+    FolderSync: {
+      getInfo: async () => ({ ok: true, configured: true, folderPath: "primary:Documents/BGM Blog Sync" }),
+      chooseFolder: async () => ({ ok: true, configured: true, folderPath: "primary:Documents/BGM Blog Sync" }),
+      readSnapshots: async () => ({
+        ok: true,
+        configured: true,
+        folderPath: "primary:Documents/BGM Blog Sync",
+        snapshots: [{
+          name: "bgm-blog-sync-desktop-abc123.json",
+          content: JSON.stringify({ format: "bgm-local-blog-folder-sync", version: 1 })
+        }]
+      }),
+      writeSnapshot: async (payload) => {
+        writes.push(payload);
+        return { ok: true, configured: true, path: `content://tree/${payload.filename}` };
+      },
+      openFolder: async () => ({ ok: true })
+    }
+  };
+  loadFresh("../platform/mobile-bridge");
+
+  const adapter = global.PlatformMobileBridge.create();
+  const info = await adapter.getFolderSyncInfo();
+  const snapshots = await adapter.readFolderSyncSnapshots();
+  const written = await adapter.writeFolderSyncSnapshot({
+    filename: "bgm-blog-sync-android-def456.json",
+    data: { posts: [{ id: "post-1" }] }
+  });
+
+  assert.equal(adapter.capabilities.folderSync, true);
+  assert.equal(info.folderPath, "primary:Documents/BGM Blog Sync");
+  assert.deepEqual(snapshots.snapshots[0].data, {
+    format: "bgm-local-blog-folder-sync",
+    version: 1
+  });
+  assert.equal(written.ok, true);
+  assert.equal(writes[0].filename, "bgm-blog-sync-android-def456.json");
+  assert.deepEqual(JSON.parse(writes[0].content), { posts: [{ id: "post-1" }] });
+});
+
 test("platform loader selects the first available real adapter", () => {
   global.PlatformContract = contract;
   const mobile = contract.createAdapter({ platform: "android", methods: {} });

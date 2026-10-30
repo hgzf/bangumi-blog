@@ -19,7 +19,12 @@
     "captureYearbookViewport",
     "saveYearbookImage",
     "revealDatabase",
-    "getDatabasePath"
+    "getDatabasePath",
+    "getFolderSyncInfo",
+    "chooseFolderSyncFolder",
+    "readFolderSyncSnapshots",
+    "writeFolderSyncSnapshot",
+    "openFolderSyncFolder"
   ]);
   const CAPABILITIES = Object.freeze([
     "database",
@@ -32,7 +37,8 @@
     "embeddedAiWeb",
     "systemResume",
     "revealDatabase",
-    "secureStorage"
+    "secureStorage",
+    "folderSync"
   ]);
   const METHOD_CAPABILITIES = Object.freeze({
     loadDatabase: "database",
@@ -48,7 +54,12 @@
     captureYearbookViewport: "yearbookImage",
     saveYearbookImage: "yearbookImage",
     onSystemResume: "systemResume",
-    revealDatabase: "revealDatabase"
+    revealDatabase: "revealDatabase",
+    getFolderSyncInfo: "folderSync",
+    chooseFolderSyncFolder: "folderSync",
+    readFolderSyncSnapshots: "folderSync",
+    writeFolderSyncSnapshot: "folderSync",
+    openFolderSyncFolder: "folderSync"
   });
   const SECURE_METHODS = Object.freeze(["get", "set", "remove"]);
 

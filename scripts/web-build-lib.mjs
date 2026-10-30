@@ -42,6 +42,7 @@ export const RUNTIME_FILES = Object.freeze([
   "period-report.js",
   "watch-session.js",
   "quarter-report.js",
+  "folder-sync.js",
   "platform-contract.js",
   "platform/electron-bridge.js",
   "platform/mobile-bridge.js",

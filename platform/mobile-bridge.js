@@ -190,21 +190,108 @@
     }
   }
 
+  async function getFolderSyncInfo() {
+    const folderSync = nativeBridge()?.FolderSync;
+    if (!folderSync?.getInfo) {
+      return { ok: false, supported: false, error: "当前平台暂不支持文件夹同步。" };
+    }
+    try {
+      return await folderSync.getInfo();
+    } catch (error) {
+      return { ok: false, supported: true, error: error?.message || "同步目录读取失败。" };
+    }
+  }
+
+  async function chooseFolderSyncFolder() {
+    const folderSync = nativeBridge()?.FolderSync;
+    if (!folderSync?.chooseFolder) {
+      return { ok: false, supported: false, error: "当前平台暂不支持文件夹同步。" };
+    }
+    try {
+      return await folderSync.chooseFolder();
+    } catch (error) {
+      return {
+        ok: false,
+        supported: true,
+        canceled: /未选择|cancel/i.test(String(error?.message || "")),
+        error: error?.message || "同步目录选择失败。"
+      };
+    }
+  }
+
+  async function readFolderSyncSnapshots() {
+    const folderSync = nativeBridge()?.FolderSync;
+    if (!folderSync?.readSnapshots) {
+      return { ok: false, supported: false, error: "当前平台暂不支持文件夹同步。" };
+    }
+    try {
+      const result = await folderSync.readSnapshots();
+      return {
+        ...result,
+        snapshots: (Array.isArray(result?.snapshots) ? result.snapshots : [])
+          .map((snapshot) => {
+            try {
+              return { name: snapshot.name, data: JSON.parse(snapshot.content) };
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean)
+      };
+    } catch (error) {
+      return { ok: false, supported: true, error: error?.message || "同步快照读取失败。" };
+    }
+  }
+
+  async function writeFolderSyncSnapshot(payload) {
+    const folderSync = nativeBridge()?.FolderSync;
+    if (!folderSync?.writeSnapshot) {
+      return { ok: false, supported: false, error: "当前平台暂不支持文件夹同步。" };
+    }
+    try {
+      return await folderSync.writeSnapshot({
+        filename: String(payload?.filename || ""),
+        content: JSON.stringify(payload?.data)
+      });
+    } catch (error) {
+      return { ok: false, supported: true, error: error?.message || "同步快照写入失败。" };
+    }
+  }
+
+  async function openFolderSyncFolder() {
+    const folderSync = nativeBridge()?.FolderSync;
+    if (!folderSync?.openFolder) {
+      return { ok: false, supported: false, error: "当前平台暂不支持文件夹同步。" };
+    }
+    try {
+      return await folderSync.openFolder();
+    } catch (error) {
+      return { ok: false, supported: true, error: error?.message || "无法打开同步目录。" };
+    }
+  }
+
   function create() {
     const hasFilesystem = Boolean(nativeBridge()?.Filesystem);
     const hasBangumiHttp = Boolean(nativeBridge()?.CapacitorHttp?.request);
+    const hasFolderSync = Boolean(nativeBridge()?.FolderSync?.readSnapshots);
     return root.PlatformContract.createAdapter({
       platform: "android",
       label: "Android",
       capabilities: {
         database: hasFilesystem,
-        bangumi: hasBangumiHttp
+        bangumi: hasBangumiHttp,
+        folderSync: hasFolderSync
       },
       methods: {
         loadDatabase,
         saveDatabase,
         requestBangumi,
-        getDatabasePath: async () => databasePathLabel()
+        getDatabasePath: async () => databasePathLabel(),
+        getFolderSyncInfo,
+        chooseFolderSyncFolder,
+        readFolderSyncSnapshots,
+        writeFolderSyncSnapshot,
+        openFolderSyncFolder
       }
     });
   }

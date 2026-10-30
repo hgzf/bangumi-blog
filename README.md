@@ -68,6 +68,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-android-rele
 
 种子只会在 Android 应用第一次启动时写入本地数据库，之后不会覆盖新记录。包含个人数据的 APK 仅适合自行安装，不应上传或公开分发。
 
+### Syncthing 双向同步
+
+电脑和 Android 都安装 Syncthing，并为两端配置同一个共享文件夹。随后在应用“系统设置 → 文件夹同步（Syncthing）”中选择这个文件夹；Android 会通过系统文件夹授权获得持久读写权限。
+
+两端不会直接覆盖同一个数据库文件，而是分别写入类似 `bgm-blog-sync-desktop-xxxxxxxx.json` 和 `bgm-blog-sync-android-xxxxxxxx.json` 的设备快照。应用启动、重新回到前台、每 45 秒以及点击“立即合并”时都会读取并合并快照：
+
+- 日志按 ID 和更新时间合并；
+- 收藏采用最近一次 Bangumi 同步结果；
+- 观看场次、接下来队列和自定义表情支持删除标记；
+- 同一设备的新编辑优先，另一设备的新日志不会丢失。
+
+Syncthing 文件夹传输的是完整个人数据库，请只连接自己的设备，并为 Syncthing 配置设备验证。
+
 ## 主要功能
 
 - 即时博客、番组档案、站内作品详情、周月记和年度年鉴五个主视图；长文直接在即时博客中阅读，不再占用独立导航栏。

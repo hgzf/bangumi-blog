@@ -31,6 +31,7 @@ const {
 const STORAGE_TOKEN_KEY = "bgm-local-blog-token";
 const STORAGE_THEME_KEY = "bgm-local-blog-theme";
 const STORAGE_AI_KEY = "bgm-local-blog-ai-key";
+const STORAGE_SYNC_DEVICE_KEY = "bgm-local-blog-sync-device-id";
 const STATIC_SUBJECT_TYPE_LABELS = { 0: "生活事件", 1: "书籍", 2: "动画", 3: "音乐", 4: "游戏", 6: "三次元" };
 const DEFAULT_ACCENT = "#f09199";
 const HARUNA_SYSTEM_PROMPT = `你的名字是春菜，是苞谷米日志的看板娘、吉祥物。你的对话人设是腹黑loli。你的文字风格简洁、带有自我反思和挑衅，不拘泥于语法和形式，并运用省略号、破折号、感叹号等。请参考以下写作风格，包括：长度约20-40字。适当使用少女口吻、可爱且腹黑的语气。适当运用黑色幽默、反讽和出人意料的观点。允许跳跃性思维，不追求逻辑线性。插入主观评论和个人见解。对细节进行关注，并挖掘更深层的含义。善用比喻和反问。你的短评通常会挑战既定观念，并从实用主义的、甚至是冷酷的角度看待事物。对二次元、社会学、人类心理学有所了解。`;
@@ -74,6 +75,16 @@ const markdownCodeStore = [];
 const markdownEmbedStore = [];
 let reportRendererError = (message) => console.error(message);
 let rendererDatabase = null;
+
+function getSyncDeviceId() {
+  const existing = localStorage.getItem(STORAGE_SYNC_DEVICE_KEY);
+  if (existing) return existing;
+  const random = globalThis.crypto?.randomUUID?.() ||
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  const deviceId = `${String(window.bgmPlatform?.name || "device").replace(/[^a-z0-9-]/gi, "")}-${random}`.slice(0, 72);
+  localStorage.setItem(STORAGE_SYNC_DEVICE_KEY, deviceId);
+  return deviceId;
+}
 
 function validateAiBaseUrl(baseUrl) {
   const parsed = new URL(String(baseUrl || "").trim());
@@ -119,6 +130,12 @@ function createEmptyDatabase() {
     quarterCharacterSelections: {},
     watchSessions: [],
     watchQueue: [],
+    syncTombstones: {
+      posts: {},
+      watchSessions: {},
+      watchQueue: {},
+      customEmojis: {}
+    },
     lastSyncAt: null
   };
 }
@@ -199,6 +216,7 @@ function normalizeDatabase(input) {
           }))
           .filter((item) => item.subject && [1, 2, 4].includes(item.type))
       : [],
+    syncTombstones: globalThis.FolderSync?.normalizeTombstones(input.syncTombstones) || base.syncTombstones,
     lastSyncAt: input.lastSyncAt || null
   };
 }
@@ -722,6 +740,15 @@ const app = createApp({
     const aiInputRef = ref(null);
     const platformCapabilities = window.bgmApi.capabilities;
     const embeddedAiWeb = Boolean(platformCapabilities.embeddedAiWeb);
+    const folderSyncCapable = Boolean(platformCapabilities.folderSync);
+    const folderSyncState = reactive({
+      configured: false,
+      folderPath: "",
+      lastAt: "",
+      busy: false,
+      state: folderSyncCapable ? "idle" : "disabled",
+      text: folderSyncCapable ? "尚未配置 Syncthing 文件夹" : "当前平台不支持文件夹同步"
+    });
     const harunaGreeting = ref(false);
     const customEmojiForm = reactive({ name: "", url: "" });
     const syncing = ref(false);
@@ -785,6 +812,9 @@ const app = createApp({
 
     let scheduledSave = null;
     let saveChain = Promise.resolve();
+    let scheduledFolderSnapshot = null;
+    let folderSyncTimer = null;
+    let folderSyncBusy = false;
 
     function appendDebug(text, level = "info") {
       const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
@@ -816,6 +846,133 @@ const app = createApp({
       return JSON.parse(JSON.stringify(database.value));
     }
 
+    function markSyncDeleted(kind, id) {
+      const value = String(id || "");
+      if (!value || !database.value.syncTombstones?.[kind]) return;
+      database.value.syncTombstones[kind][value] = new Date().toISOString();
+    }
+
+    function folderSyncFilename() {
+      return `bgm-blog-sync-${getSyncDeviceId()}.json`;
+    }
+
+    function createFolderSnapshot() {
+      return window.FolderSync.createSnapshot({
+        database: snapshotDatabase(),
+        deviceId: getSyncDeviceId(),
+        platform: window.bgmPlatform?.name || "unknown",
+        savedAt: new Date().toISOString()
+      });
+    }
+
+    async function refreshFolderSyncInfo(showError = false) {
+      if (!folderSyncCapable) return;
+      const result = await window.bgmApi.getFolderSyncInfo();
+      if (!result?.ok) {
+        folderSyncState.state = "error";
+        folderSyncState.text = result?.error || "同步目录读取失败。";
+        if (showError) showToast(folderSyncState.text, true);
+        return result;
+      }
+      folderSyncState.configured = Boolean(result.configured);
+      folderSyncState.folderPath = result.folderPath || "";
+      folderSyncState.state = result.configured ? "ok" : "idle";
+      folderSyncState.text = result.configured ? "Syncthing 文件夹已配置" : "请选择 Syncthing 同步文件夹";
+      return result;
+    }
+
+    async function chooseFolderSyncFolder() {
+      if (!folderSyncCapable) return;
+      const result = await window.bgmApi.chooseFolderSyncFolder();
+      if (!result?.ok) {
+        if (!result?.canceled) showToast(result?.error || "同步文件夹选择失败。", true);
+        return;
+      }
+      folderSyncState.configured = true;
+      folderSyncState.folderPath = result.folderPath || "";
+      folderSyncState.state = "ok";
+      folderSyncState.text = "Syncthing 文件夹已配置";
+      showToast("同步文件夹已设置。");
+      await syncFolderNow({ quiet: false });
+    }
+
+    async function openFolderSyncFolder() {
+      if (!folderSyncCapable) return;
+      const result = await window.bgmApi.openFolderSyncFolder();
+      if (!result?.ok && !result?.canceled) showToast(result?.error || "无法打开同步文件夹。", true);
+    }
+
+    async function writeLocalFolderSnapshot() {
+      if (!folderSyncCapable || !folderSyncState.configured) return { ok: false, configured: false };
+      return window.bgmApi.writeFolderSyncSnapshot({
+        filename: folderSyncFilename(),
+        data: createFolderSnapshot()
+      });
+    }
+
+    function scheduleFolderSnapshot() {
+      if (!folderSyncCapable || !folderSyncState.configured) return;
+      if (scheduledFolderSnapshot) clearTimeout(scheduledFolderSnapshot);
+      scheduledFolderSnapshot = setTimeout(() => {
+        scheduledFolderSnapshot = null;
+        void writeLocalFolderSnapshot().then((result) => {
+          if (result && !result.ok) appendDebug(`同步快照写入失败：${result.error}`, "error");
+        });
+      }, 1500);
+    }
+
+    async function syncFolderNow({ quiet = false } = {}) {
+      if (!folderSyncCapable || folderSyncBusy) return { ok: false, busy: folderSyncBusy };
+      if (!databaseLoaded) return { ok: false, notReady: true };
+      if (!folderSyncState.configured) await refreshFolderSyncInfo(quiet === false);
+      if (!folderSyncState.configured) {
+        if (!quiet) showToast("请先选择 Syncthing 同步文件夹。", true);
+        return { ok: false, configured: false };
+      }
+      folderSyncBusy = true;
+      folderSyncState.busy = true;
+      folderSyncState.state = "active";
+      folderSyncState.text = "正在同步文件夹…";
+      try {
+        const localSave = await persistDatabase();
+        if (!localSave?.ok) throw new Error(localSave?.error || "本地数据库保存失败。");
+        const writeResult = await writeLocalFolderSnapshot();
+        if (!writeResult?.ok) throw new Error(writeResult?.error || "同步快照写入失败。");
+        const readResult = await window.bgmApi.readFolderSyncSnapshots();
+        if (!readResult?.ok) throw new Error(readResult?.error || "同步快照读取失败。");
+        const merged = window.FolderSync.mergeSnapshots(
+          database.value,
+          readResult.snapshots || [],
+          { now: new Date().toISOString() }
+        );
+        const normalized = normalizeDatabase(merged);
+        const changed = window.FolderSync.hasChanges(database.value, normalized);
+        if (changed) {
+          database.value = normalized;
+          theme.value = database.value.settings.theme === "dark" ? "dark" : "light";
+          applyTheme();
+          await persistDatabase();
+        }
+        folderSyncState.configured = true;
+        folderSyncState.folderPath = readResult.folderPath || writeResult.folderPath || folderSyncState.folderPath;
+        folderSyncState.lastAt = new Date().toISOString();
+        folderSyncState.state = "ok";
+        folderSyncState.text = changed ? "已合并其他设备的新记录" : "同步完成，没有新记录";
+        appendDebug(`Syncthing 文件夹同步完成${changed ? "并合并了新记录" : ""}`, "success");
+        if (!quiet) showToast(folderSyncState.text);
+        return { ok: true, changed };
+      } catch (error) {
+        folderSyncState.state = "error";
+        folderSyncState.text = `文件夹同步失败：${error.message}`;
+        appendDebug(folderSyncState.text, "error");
+        if (!quiet) showToast(folderSyncState.text, true, 5000);
+        return { ok: false, error: error.message };
+      } finally {
+        folderSyncBusy = false;
+        folderSyncState.busy = false;
+      }
+    }
+
     function persistDatabase() {
       const snapshot = snapshotDatabase();
       try {
@@ -827,6 +984,7 @@ const app = createApp({
         .then(() => window.bgmApi.saveDatabase(snapshot))
         .then((result) => {
           if (result && !result.ok) appendDebug(`本地保存失败：${result.error}`, "error");
+          if (result?.ok) scheduleFolderSnapshot();
           return result;
         })
         .catch((error) => {
@@ -1254,11 +1412,15 @@ const app = createApp({
     }
 
     function handleVisibilityRefresh() {
-      if (!document.hidden) refreshCurrentDate();
+      if (!document.hidden) {
+        refreshCurrentDate();
+        void syncFolderNow({ quiet: true });
+      }
     }
 
     function handleWindowDateRefresh() {
       refreshCurrentDate();
+      void syncFolderNow({ quiet: true });
     }
 
     function startDateRefreshWatch() {
@@ -1267,7 +1429,10 @@ const app = createApp({
       document.addEventListener("visibilitychange", handleVisibilityRefresh);
       window.addEventListener("focus", handleWindowDateRefresh);
       window.addEventListener("pageshow", handleWindowDateRefresh);
-      unsubscribeSystemResume = window.bgmApi.onSystemResume?.(() => refreshCurrentDate());
+      unsubscribeSystemResume = window.bgmApi.onSystemResume?.(() => {
+        refreshCurrentDate();
+        void syncFolderNow({ quiet: true });
+      });
     }
 
     function stopDateRefreshWatch() {
@@ -1532,6 +1697,7 @@ const app = createApp({
     async function removeQueueItem(item) {
       const index = database.value.watchQueue.findIndex((candidate) => candidate.id === item.id);
       if (index < 0) return;
+      markSyncDeleted("watchQueue", item.id);
       database.value.watchQueue.splice(index, 1);
       await persistDatabase();
       showToast(`已从接下来移除《${item.subject?.name || "作品"}》。`);
@@ -4241,6 +4407,7 @@ const app = createApp({
 
     function deletePost(post) {
       askConfirm(`确定删除“${post.title || excerpt(post.content, 24)}”吗？删除后只能通过此前的备份恢复。`, async () => {
+        markSyncDeleted("posts", post.id);
         database.value.posts = database.value.posts.filter((item) => item.id !== post.id);
         if (currentArticle.value?.id === post.id) currentArticle.value = null;
         await persistDatabase();
@@ -4424,6 +4591,7 @@ const app = createApp({
     }
 
     function removeCustomEmoji(name) {
+      markSyncDeleted("customEmojis", name);
       database.value.settings.customEmojis = database.value.settings.customEmojis.filter((emoji) => emoji.name !== name);
       CUSTOM_EMOJI_MAP.delete(name);
     }
@@ -4904,6 +5072,7 @@ const app = createApp({
       const session = activeWatchSessionForSubject.value;
       if (!session) return;
       askConfirm("取消这场观看后，本次开始/结束时间和集数都不会保留。继续吗？", async () => {
+        markSyncDeleted("watchSessions", session.id);
         database.value.watchSessions = database.value.watchSessions
           .filter((item) => item.id !== session.id);
         await persistDatabase();
@@ -4927,6 +5096,7 @@ const app = createApp({
       settingsForm.aiSystemPrompt = database.value.settings.aiSystemPrompt || "";
       settingsForm.aiWebUrl = database.value.settings.aiWebUrl || "";
       showSettings.value = true;
+      void refreshFolderSyncInfo();
       nextTick(() => document.getElementById("settings-username")?.focus());
     }
 
@@ -5359,6 +5529,10 @@ const app = createApp({
       databaseLoaded = true;
       void checkScheduledPeriodReports();
       void loadAiringCalendar();
+      if (folderSyncCapable) {
+        await refreshFolderSyncInfo();
+        if (folderSyncState.configured) void syncFolderNow({ quiet: true });
+      }
     }
 
     onMounted(() => {
@@ -5367,6 +5541,11 @@ const app = createApp({
       updateMascot(mascotLine.value);
       startDateRefreshWatch();
       loadInitialData();
+      if (folderSyncCapable) {
+        folderSyncTimer = setInterval(() => {
+          if (!document.hidden) void syncFolderNow({ quiet: true });
+        }, 45000);
+      }
       setTimeout(ensureShortcodes, 600);
     });
 
@@ -5375,6 +5554,8 @@ const app = createApp({
       stopDateRefreshWatch();
       if (watchSessionTickTimer) clearInterval(watchSessionTickTimer);
       if (scheduledSave) clearTimeout(scheduledSave);
+      if (scheduledFolderSnapshot) clearTimeout(scheduledFolderSnapshot);
+      if (folderSyncTimer) clearInterval(folderSyncTimer);
       persistDatabase();
     });
 
@@ -5452,6 +5633,8 @@ const app = createApp({
       aiWebSrc,
       platformCapabilities,
       embeddedAiWeb,
+      folderSyncSupported: folderSyncCapable,
+      folderSyncState,
       harunaGreeting,
       syncing,
       syncStatus,
@@ -5669,6 +5852,9 @@ const app = createApp({
       setAccentColor,
       applyAppearance,
       syncBangumiData,
+      chooseFolderSyncFolder,
+      openFolderSyncFolder,
+      syncFolderNow,
       openSubjectSearch,
       closeSubjectSearch,
       switchToLocalSearch,

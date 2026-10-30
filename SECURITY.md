@@ -14,6 +14,9 @@ The following data can leave the device when the corresponding feature is used:
   endpoint configured by the user.
 - Opening the optional in-app AI webpage connects to the webpage selected by
   the user.
+- Folder sync copies database snapshots into the folder selected by the user.
+  Syncthing, or another file-sync tool the user configures, is responsible for
+  transporting those snapshots between the user's devices.
 
 API keys and Bangumi tokens are not included in exported backup files.
 
