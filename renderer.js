@@ -945,10 +945,12 @@ const app = createApp({
           readResult.snapshots || [],
           { now: new Date().toISOString() }
         );
+        const previousDatabase = database.value;
         const normalized = normalizeDatabase(merged);
-        const changed = window.FolderSync.hasChanges(database.value, normalized);
+        database.value = normalized;
+        const importedComments = await importCollectionComments({ silent: true, persist: false });
+        const changed = window.FolderSync.hasChanges(previousDatabase, database.value);
         if (changed) {
-          database.value = normalized;
           theme.value = database.value.settings.theme === "dark" ? "dark" : "light";
           applyTheme();
           await persistDatabase();
@@ -957,8 +959,13 @@ const app = createApp({
         folderSyncState.folderPath = readResult.folderPath || writeResult.folderPath || folderSyncState.folderPath;
         folderSyncState.lastAt = new Date().toISOString();
         folderSyncState.state = "ok";
-        folderSyncState.text = changed ? "已合并其他设备的新记录" : "同步完成，没有新记录";
-        appendDebug(`Syncthing 文件夹同步完成${changed ? "并合并了新记录" : ""}`, "success");
+        folderSyncState.text = importedComments
+          ? `已合并记录并导入 ${importedComments} 条 Bangumi 漫评`
+          : changed ? "已合并其他设备的新记录" : "同步完成，没有新记录";
+        appendDebug(
+          `Syncthing 文件夹同步完成${changed ? "并合并了新记录" : ""}${importedComments ? `，自动导入 ${importedComments} 条 Bangumi 漫评` : ""}`,
+          "success"
+        );
         if (!quiet) showToast(folderSyncState.text);
         return { ok: true, changed };
       } catch (error) {
@@ -4726,11 +4733,12 @@ const app = createApp({
         database.value.collections = collections;
         database.value.subjectCache = cache;
         database.value.lastSyncAt = new Date().toISOString();
+        const importedComments = await importCollectionComments({ silent: true, persist: false });
         syncStatus.state = "ok";
-        syncStatus.text = `已成功同步 ${collections.length} 部作品`;
+        syncStatus.text = `已成功同步 ${collections.length} 部作品${importedComments ? `，导入 ${importedComments} 条漫评` : ""}`;
         syncStatus.short = `同步 ${collections.length} 部`;
-        updateMascot(`同步完成，${collections.length} 部收藏回到了本地档案库。`);
-        appendDebug(`同步完成：${collections.length} 部作品`, "success");
+        updateMascot(`同步完成，${collections.length} 部收藏回到了本地档案库。${importedComments ? `新增 ${importedComments} 条 Bangumi 漫评。` : ""}`);
+        appendDebug(`同步完成：${collections.length} 部作品${importedComments ? `，自动导入 ${importedComments} 条漫评` : ""}`, "success");
         await persistDatabase();
         void loadAiringCalendar(true);
       } catch (error) {
@@ -5413,7 +5421,7 @@ const app = createApp({
       }
     }
 
-    async function importCollectionComments() {
+    async function importCollectionComments({ silent = false, persist = true } = {}) {
       const existing = new Set(database.value.posts.map((post) => post.sourceKey).filter(Boolean));
       let imported = 0;
       for (const subject of database.value.collections) {
@@ -5438,13 +5446,14 @@ const app = createApp({
         imported += 1;
       }
       if (!imported) {
-        showToast("没有新的收藏短评需要导入。");
-        return;
+        if (!silent) showToast("没有新的收藏短评需要导入。");
+        return 0;
       }
-      await persistDatabase();
-      showToast(`已从 Bangumi 收藏导入 ${imported} 条碎碎念。`);
-      updateMascot(`从收藏里找回了 ${imported} 条旧短评。`);
+      if (persist) await persistDatabase();
+      if (!silent) showToast(`已从 Bangumi 收藏导入 ${imported} 条碎碎念。`);
+      if (!silent) updateMascot(`从收藏里找回了 ${imported} 条旧短评。`);
       appendDebug(`导入 ${imported} 条 Bangumi 收藏吐槽`, "success");
+      return imported;
     }
 
     function closeAnyModal() {
