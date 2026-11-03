@@ -113,6 +113,10 @@
               :class="{ article: editor.kind === 'article' }"
               :placeholder="editor.kind === 'article' ? '写下完整的故事。支持 Markdown、[mask]黑幕[/mask]、[quote]引用[/quote] 和 [bgm:12345] 条目卡片。' : '此刻在想什么？也可以直接粘贴、拖入图片。'"
               aria-label="日志正文"
+              @focus="editorError = ''"
+              @input="scheduleEditorContentSync"
+              @compositionstart="handleEditorCompositionStart"
+              @compositionend="handleEditorCompositionEnd"
               @paste="handlePaste"
             ></textarea>
 

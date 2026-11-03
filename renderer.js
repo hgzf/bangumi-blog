@@ -815,6 +815,8 @@ const app = createApp({
     let scheduledFolderSnapshot = null;
     let folderSyncTimer = null;
     let folderSyncBusy = false;
+    let editorContentSyncTimer = null;
+    let editorComposing = false;
 
     function appendDebug(text, level = "info") {
       const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
@@ -4288,7 +4290,35 @@ const app = createApp({
       nextTick(() => editorInput.value?.focus());
     }
 
+    function syncEditorContentFromDom(value) {
+      const content = typeof value === "string" ? value : "";
+      if (editor.content !== content) editor.content = content;
+    }
+
+    function scheduleEditorContentSync(event, delay = 220) {
+      const value = event?.target?.value;
+      if (editorContentSyncTimer) clearTimeout(editorContentSyncTimer);
+      editorContentSyncTimer = setTimeout(() => {
+        editorContentSyncTimer = null;
+        if (!editorComposing) syncEditorContentFromDom(value);
+      }, delay);
+    }
+
+    function handleEditorCompositionStart() {
+      editorComposing = true;
+      if (editorContentSyncTimer) clearTimeout(editorContentSyncTimer);
+      editorContentSyncTimer = null;
+    }
+
+    function handleEditorCompositionEnd(event) {
+      editorComposing = false;
+      scheduleEditorContentSync(event, 0);
+    }
+
     function resetEditor() {
+      if (editorContentSyncTimer) clearTimeout(editorContentSyncTimer);
+      editorContentSyncTimer = null;
+      editorComposing = false;
       editor.kind = "note";
       editor.title = "";
       editor.content = "";
@@ -5563,6 +5593,7 @@ const app = createApp({
       stopDateRefreshWatch();
       if (watchSessionTickTimer) clearInterval(watchSessionTickTimer);
       if (scheduledSave) clearTimeout(scheduledSave);
+      if (editorContentSyncTimer) clearTimeout(editorContentSyncTimer);
       if (scheduledFolderSnapshot) clearTimeout(scheduledFolderSnapshot);
       if (folderSyncTimer) clearInterval(folderSyncTimer);
       persistDatabase();
@@ -5800,6 +5831,9 @@ const app = createApp({
       scrollToHeading,
       setEditorKind,
       focusComposer,
+      scheduleEditorContentSync,
+      handleEditorCompositionStart,
+      handleEditorCompositionEnd,
       editPost,
       publishPost,
       deletePost,
