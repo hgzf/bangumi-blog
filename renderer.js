@@ -373,10 +373,7 @@ function excerpt(value, length = 130) {
 }
 
 function countWords(value) {
-  const text = String(value || "");
-  const cjk = (text.match(/[\u3400-\u9fff]/g) || []).length;
-  const latin = (text.replace(/[\u3400-\u9fff]/g, " ").match(/[A-Za-z0-9_]+/g) || []).length;
-  return cjk + latin;
+  return Array.from(plainText(value).replace(/\s+/g, "")).length;
 }
 
 function readingMinutes(value) {
@@ -815,8 +812,6 @@ const app = createApp({
     let scheduledFolderSnapshot = null;
     let folderSyncTimer = null;
     let folderSyncBusy = false;
-    let editorContentSyncTimer = null;
-    let editorComposing = false;
 
     function appendDebug(text, level = "info") {
       const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
@@ -4295,33 +4290,25 @@ const app = createApp({
       if (editor.content !== content) editor.content = content;
     }
 
-    function scheduleEditorContentSync(event, delay = 220) {
-      const value = event?.target?.value;
-      if (editorContentSyncTimer) clearTimeout(editorContentSyncTimer);
-      editorContentSyncTimer = setTimeout(() => {
-        editorContentSyncTimer = null;
-        if (!editorComposing) syncEditorContentFromDom(value);
-      }, delay);
+    function handleEditorContentInput(event) {
+      syncEditorContentFromDom(event?.target?.value);
     }
 
-    function handleEditorCompositionStart() {
-      editorComposing = true;
-      if (editorContentSyncTimer) clearTimeout(editorContentSyncTimer);
-      editorContentSyncTimer = null;
+    function applyEditorContentToDom(value) {
+      const textarea = editorInput.value;
+      const content = String(value ?? "");
+      if (textarea && textarea.value !== content) textarea.value = content;
     }
 
-    function handleEditorCompositionEnd(event) {
-      editorComposing = false;
-      scheduleEditorContentSync(event, 0);
+    function setEditorContent(value) {
+      editor.content = String(value ?? "");
+      nextTick(() => applyEditorContentToDom(editor.content));
     }
 
     function resetEditor() {
-      if (editorContentSyncTimer) clearTimeout(editorContentSyncTimer);
-      editorContentSyncTimer = null;
-      editorComposing = false;
       editor.kind = "note";
       editor.title = "";
-      editor.content = "";
+      setEditorContent("");
       editor.category = "";
       editor.tagsText = "";
       editor.images = [];
@@ -4341,7 +4328,7 @@ const app = createApp({
       currentArticle.value = null;
       editor.kind = post.kind;
       editor.title = post.title || "";
-      editor.content = post.content || "";
+      setEditorContent(post.content || "");
       editor.category = post.category || "";
       editor.tagsText = (post.tags || []).join(" ");
       editor.images = JSON.parse(JSON.stringify(post.images || []));
@@ -4533,9 +4520,10 @@ const app = createApp({
 
     function insertText(text) {
       const textarea = editorInput.value;
-      const start = emojiInsertRange?.start ?? textarea?.selectionStart ?? editor.content.length;
-      const end = emojiInsertRange?.end ?? textarea?.selectionEnd ?? editor.content.length;
-      editor.content = `${editor.content.slice(0, start)}${text}${editor.content.slice(end)}`;
+      const current = textarea?.value ?? editor.content;
+      const start = emojiInsertRange?.start ?? textarea?.selectionStart ?? current.length;
+      const end = emojiInsertRange?.end ?? textarea?.selectionEnd ?? current.length;
+      setEditorContent(`${current.slice(0, start)}${text}${current.slice(end)}`);
       emojiInsertRange = { start: start + text.length, end: start + text.length };
       nextTick(() => {
         if (!textarea) return;
@@ -5593,7 +5581,6 @@ const app = createApp({
       stopDateRefreshWatch();
       if (watchSessionTickTimer) clearInterval(watchSessionTickTimer);
       if (scheduledSave) clearTimeout(scheduledSave);
-      if (editorContentSyncTimer) clearTimeout(editorContentSyncTimer);
       if (scheduledFolderSnapshot) clearTimeout(scheduledFolderSnapshot);
       if (folderSyncTimer) clearInterval(folderSyncTimer);
       persistDatabase();
@@ -5831,9 +5818,7 @@ const app = createApp({
       scrollToHeading,
       setEditorKind,
       focusComposer,
-      scheduleEditorContentSync,
-      handleEditorCompositionStart,
-      handleEditorCompositionEnd,
+      handleEditorContentInput,
       editPost,
       publishPost,
       deletePost,
