@@ -1,8 +1,31 @@
 {
   "name": "bgm-local-blog",
   "version": "1.0.0",
-  "description": "纯本地 Bangumi 个人博客与碎碎念日志桌面客户端",
+  "description": "纯本地 Bangumi 个人博客与碎碎念日志桌面及 Android 客户端",
+  "author": "hgzf",
   "license": "MIT",
+  "homepage": "https://github.com/hgzf/bgm-local-blog#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hgzf/bgm-local-blog.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hgzf/bgm-local-blog/issues"
+  },
+  "keywords": [
+    "bangumi",
+    "blog",
+    "journal",
+    "electron",
+    "capacitor",
+    "android",
+    "vue3",
+    "local-first",
+    "syncthing"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "main": "main.js",
   "private": true,
   "scripts": {

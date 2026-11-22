@@ -1,6 +1,15 @@
 # 苞谷米日志
 
-一个纯本地运行的 Bangumi 个人博客、碎碎念和追番档案桌面客户端。应用使用 Electron、Vue 3、Tailwind CSS、Marked.js 和 DOMPurify。
+[![CI](https://github.com/hgzf/bgm-local-blog/actions/workflows/ci.yml/badge.svg)](https://github.com/hgzf/bgm-local-blog/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-F09199.svg)](LICENSE)
+
+一个纯本地运行的 Bangumi 个人博客、碎碎念和追番档案桌面及 Android 客户端。应用使用 Electron、Capacitor、Vue 3、Tailwind CSS、Marked.js 和 DOMPurify。
+
+## 界面预览（脱敏演示数据）
+
+| 即时博客与春菜吐槽席 | 番组档案、放送日历与接下来队列 | 私人年度年鉴 |
+| :---: | :---: | :---: |
+| ![即时博客](docs/screenshots/timeline.png) | ![番组档案](docs/screenshots/subjects.png) | ![私人年鉴](docs/screenshots/yearbook.png) |
 
 ## 开发运行
 
@@ -60,6 +69,19 @@ Windows 上的 Android Gradle Plugin 不支持中文项目路径。构建 Androi
 adb install -r .\android\app\build\outputs\apk\release\app-release.apk
 ```
 
+#### 本地 Debug 试跑（无需私有正式签名）
+
+如果你克隆本仓库自行开发或体验，无需配置 `.bgmblog-signing` 正式签名密钥，直接生成 Web 资源并执行 Gradle Debug 构建即可：
+
+```powershell
+pnpm install
+pnpm build:web
+pnpm exec cap sync android
+cd android
+.\gradlew.bat assembleDebug
+adb install -r .\app\build\outputs\apk\debug\app-debug.apk
+```
+
 如需从桌面端一次性迁移全部日志、收藏和评价，可以先导出 JSON，再把它作为仅本机使用的迁移种子构建：
 
 ```powershell
@@ -99,6 +121,20 @@ Syncthing 文件夹传输的是完整个人数据库，请只连接自己的设�
 - 春菜使用腹黑萝莉人设，可在发布前勾选生成 20–40 字评价；未勾选时保持日志纯净。支持本地吐槽模式和 OpenAI 兼容接口，也可在应用内打开指定 AI 网页。
 - 支持更换主题色、导入本地背景图片及调整背景强度。
 - 本地 JSON 备份恢复、Markdown 导出、浅色/深色主题与 API 调试日志。
+
+## 桌面端 vs Android 端支持情况
+
+| 功能模块 | 桌面端（Electron） | Android 端（Capacitor） | 说明 |
+| --- | :---: | :---: | --- |
+| 即时博客、长文阅读、周月季记、私人年鉴 | ✅ | ✅ | 共用同一套 Vue 3 业务与统计代码 |
+| 本地数据库持久化（`bgm_blog_database.json`） | ✅ | ✅ | 桌面存于用户数据目录，Android 存于应用私有目录 |
+| Bangumi 收藏同步、章节分页与漫评自动导入 | ✅ | ✅ | Android 通过 `CapacitorHttp` 访问 `api.bgm.tv` |
+| Syncthing 文件夹双向同步（设备快照合并） | ✅ | ✅ | Android 通过原生 SAF 文件夹授权插件读写共享目录 |
+| 春菜 AI 对话与评价（OpenAI 兼容接口 + 本地回退） | ✅ | ✅ | 桌面走 `net.fetch`（支持系统代理），Android 走客户端请求 |
+| JSON 备份导入恢复 | ✅ | ✅ | 支持文件选择器导入恢复 |
+| JSON 备份导出 / Markdown 导出 | ✅ | ⚠️ 迭代中 | 桌面支持系统保存对话框，Android 原生分享导出见阶段五规划 |
+| 年鉴整页 PNG 长图导出 | ✅ | ⚠️ 迭代中 | 桌面支持逐屏截取拼接长图，Android 端长图导出待接入 |
+| 内嵌 AI 网页模式（`<webview>`） | ✅ | — | 仅桌面 Electron 支持隔离 `webview` |
 
 ## AI 对话
 
