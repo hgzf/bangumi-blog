@@ -50,13 +50,16 @@ test("web build contains runtime files and passes security validation", async ()
   }
 });
 
-test("web validation rejects personal shortcuts in the output", async () => {
+test("web validation rejects personal shortcuts and migration seeds in the output", async () => {
   const { buildWeb, validateWebBuild } = await loadLib();
   const outDir = await mkdtemp(join(tmpdir(), "bgm-web-forbidden-"));
   try {
     await buildWeb({ rootDir: projectRoot, outDir });
     await writeFile(join(outDir, "personal.lnk"), "not allowed");
     await assert.rejects(validateWebBuild(outDir), /Forbidden web build file/);
+    await rm(join(outDir, "personal.lnk"), { force: true });
+    await writeFile(join(outDir, "mobile-seed.json"), "{}");
+    await assert.rejects(validateWebBuild(outDir), /Forbidden web build file: mobile-seed\.json/);
   } finally {
     await rm(outDir, { recursive: true, force: true });
   }

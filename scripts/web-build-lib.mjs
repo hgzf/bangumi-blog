@@ -181,6 +181,8 @@ function isForbiddenPath(filePath, relativePath) {
   if (FORBIDDEN_EXTENSIONS.has(extname(name))) return true;
   return name === "bgm_blog_database.json" ||
     name.endsWith("/bgm_blog_database.json") ||
+    name === "mobile-seed.json" ||
+    name.endsWith("/mobile-seed.json") ||
     name.includes(".taste-skill/") ||
     name.includes("node_modules/");
 }

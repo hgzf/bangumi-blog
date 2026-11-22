@@ -85,8 +85,16 @@ try {
 
   $apk = Join-Path $projectRoot "android\app\build\outputs\apk\release\app-release.apk"
   if (!(Test-Path $apk)) { throw "Signed APK was not created: $apk" }
-  Write-Output "SIGNED_APK=$apk"
+  if ($MigrationSeed) {
+    $seededApk = Join-Path $projectRoot "android\app\build\outputs\apk\release\app-release-seeded.apk"
+    Move-Item -LiteralPath $apk -Destination $seededApk -Force
+    Write-Output "SIGNED_SEEDED_APK=$seededApk"
+  } else {
+    Write-Output "SIGNED_APK=$apk"
+  }
 } finally {
+  Remove-Item -LiteralPath (Join-Path $projectRoot "dist\mobile-seed.json") -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath (Join-Path $projectRoot "android\app\src\main\assets\public\mobile-seed.json") -Force -ErrorAction SilentlyContinue
   if ((Get-Location).Path -like "*\android") { Pop-Location }
   if ((Get-Location).Path -eq $projectRoot) { Pop-Location }
   Remove-Item Env:BGM_BLOG_KEYSTORE_PASSWORD -ErrorAction SilentlyContinue
