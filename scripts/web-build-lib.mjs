@@ -53,8 +53,6 @@ export const RUNTIME_FILES = Object.freeze([
   "assets/app-icon.png",
   "assets/app-icon-64.png",
   "assets/app-icon.ico",
-  "assets/app-icon-20261028.ico",
-  "assets/haruna-reference.png",
   "assets/haruna-reference-clean.png"
 ]);
 

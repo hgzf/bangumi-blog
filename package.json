@@ -2,6 +2,7 @@
   "name": "bgm-local-blog",
   "version": "1.0.0",
   "description": "纯本地 Bangumi 个人博客与碎碎念日志桌面客户端",
+  "license": "MIT",
   "main": "main.js",
   "private": true,
   "scripts": {
