@@ -1,0 +1,108 @@
+name: Android APK
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional GitHub Release tag to attach the built APK to (e.g. v1.0.0)"
+        required: false
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Clean Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK Platform 36
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and validate clean web bundle
+        run: |
+          pnpm build:web
+          pnpm check:web
+          pnpm exec cap sync android
+
+      - name: Build Android APK
+        id: build
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          chmod +x android/gradlew
+          TAG="${{ github.event.release.tag_name || github.event.inputs.release_tag || 'snapshot' }}"
+          mkdir -p out-apk
+
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ]; then
+            echo "Release signing secrets detected: building signed release APK."
+            KEYSTORE_PATH="$RUNNER_TEMP/bgm-blog-release.jks"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+            export BGM_BLOG_KEYSTORE_FILE="$KEYSTORE_PATH"
+            export BGM_BLOG_KEYSTORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+            export BGM_BLOG_KEY_ALIAS="$ANDROID_KEY_ALIAS"
+            (cd android && ./gradlew assembleRelease)
+            rm -f "$KEYSTORE_PATH"
+            APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+            APK_NAME="bgm-local-blog-${TAG}-release.apk"
+          else
+            echo "No release signing secrets configured: building clean debug APK."
+            (cd android && ./gradlew assembleDebug)
+            APK_SRC="android/app/build/outputs/apk/debug/app-debug.apk"
+            APK_NAME="bgm-local-blog-${TAG}-debug.apk"
+          fi
+
+          cp "$APK_SRC" "out-apk/$APK_NAME"
+          (cd out-apk && sha256sum "$APK_NAME" > "${APK_NAME}.sha256")
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${{ github.event.release.tag_name || github.event.inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          cat "out-apk/${APK_NAME}.sha256"
+
+      - name: Upload APK workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.apk_name }}
+          path: out-apk/*
+          retention-days: 30
+
+      - name: Attach APK to GitHub Release
+        if: steps.build.outputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.build.outputs.release_tag }}" \
+            "out-apk/${{ steps.build.outputs.apk_name }}" \
+            "out-apk/${{ steps.build.outputs.apk_name }}.sha256" \
+            --clobber
