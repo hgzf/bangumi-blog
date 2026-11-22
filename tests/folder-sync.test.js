@@ -89,6 +89,74 @@ test("folder snapshots use the newest Bangumi collection sync without resurrecti
   assert.equal(merged.lastSyncAt, "2026-10-29T00:00:00.000Z");
 });
 
+test("folder snapshots preserve a valid Bangumi profile object", () => {
+  const current = {
+    posts: [],
+    collections: [],
+    settings: {},
+    profile: {
+      id: 1,
+      username: "desktop",
+      nickname: "电脑旧头像",
+      avatar: "https://example.com/old.jpg"
+    }
+  };
+  const remoteProfile = {
+    id: 2,
+    username: "tablet",
+    nickname: "平板新头像",
+    avatar: "https://example.com/new.jpg"
+  };
+  const remote = FolderSync.createSnapshot({
+    deviceId: "android-device",
+    platform: "android",
+    savedAt: "2026-10-30T01:00:00.000Z",
+    database: {
+      posts: [],
+      collections: [],
+      settings: {},
+      profile: remoteProfile
+    }
+  });
+
+  const merged = FolderSync.mergeSnapshots(current, [remote], { now: "2026-10-30T02:00:00.000Z" });
+
+  assert.deepEqual(merged.profile, current.profile);
+});
+
+test("folder snapshots recover a profile from a valid remote snapshot", () => {
+  const remoteProfile = {
+    id: 2,
+    username: "tablet",
+    nickname: "平板新头像",
+    avatar: "https://example.com/new.jpg"
+  };
+  const remote = FolderSync.createSnapshot({
+    deviceId: "android-device",
+    platform: "android",
+    savedAt: "2026-10-30T01:00:00.000Z",
+    database: {
+      posts: [],
+      collections: [],
+      settings: {},
+      profile: remoteProfile
+    }
+  });
+
+  const merged = FolderSync.mergeSnapshots(
+    {
+      posts: [],
+      collections: [],
+      settings: {},
+      profile: "2026-10-30T02:00:00.000Z"
+    },
+    [remote],
+    { now: "2026-10-30T03:00:00.000Z" }
+  );
+
+  assert.deepEqual(merged.profile, remoteProfile);
+});
+
 test("folder snapshot envelope rejects invalid data", () => {
   assert.throws(
     () => FolderSync.createSnapshot({ database: null, deviceId: "device" }),

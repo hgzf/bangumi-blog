@@ -102,6 +102,11 @@
     return selected;
   }
 
+  function profileObject(database) {
+    const profile = database?.profile;
+    return profile && typeof profile === "object" && !Array.isArray(profile) ? profile : null;
+  }
+
   function validSnapshot(snapshot) {
     return snapshot &&
       snapshot.format === FORMAT &&
@@ -149,10 +154,13 @@
     const collectionSource = latestSource(sources, (database) => database.lastSyncAt);
     const calendarSource = latestSource(sources, (database) => database.calendarCache?.syncedAt);
     const chatSource = latestSource(sources, (_database, source) => source.savedAt);
-    const profileSource = latestSource(sources, (_database, source) =>
-      source.database?.profile ? source.savedAt : ""
+    const profileSource = latestSource(sources, (database, source) =>
+      profileObject(database) ? source.savedAt : ""
     );
     const lastSyncAt = collectionSource?.value || latest.lastSyncAt || null;
+    const profile = profileSource
+      ? profileObject(profileSource.source?.database)
+      : profileObject(latest);
 
     return {
       ...latest,
@@ -166,7 +174,7 @@
       subjectCharacterCache: mergeObjectMaps(sources, "subjectCharacterCache"),
       episodeCache: mergeObjectMaps(sources, "episodeCache"),
       calendarCache: calendarSource?.source?.database?.calendarCache || latest.calendarCache,
-      profile: profileSource?.value || latest.profile || null,
+      profile,
       settings: mergeSettings(sources, tombstones),
       chatMessages: Array.isArray(chatSource?.source?.database?.chatMessages)
         ? chatSource.source.database.chatMessages

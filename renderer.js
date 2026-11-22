@@ -171,7 +171,9 @@ function normalizeDatabase(input) {
             : {}
         }
       : base.calendarCache,
-    profile: input.profile || null,
+    profile: input.profile && typeof input.profile === "object" && !Array.isArray(input.profile)
+      ? input.profile
+      : null,
     settings: {
       ...base.settings,
       ...settings,
@@ -271,7 +273,9 @@ function normalizeSubject(raw, fallback = {}) {
     name: nameCn || originalName || raw.name || `Bangumi 条目 ${id}`,
     nameCn,
     originalName,
-    image: images.large || images.medium || images.common || images.grid || raw.image || "",
+    image: globalThis.ImageUrl.secure(
+      images.large || images.medium || images.common || images.grid || raw.image || ""
+    ),
     type,
     status: Number(raw.status ?? raw.type ?? fallback.status ?? 0),
     score: finiteOrNull(raw.score ?? source.score),
@@ -295,6 +299,17 @@ function normalizeSubject(raw, fallback = {}) {
     updatedAt: raw.updatedAt || raw.updated_at || new Date(0).toISOString(),
     collectionSubjectType: Number(raw.subject_type || 0) || type
   };
+}
+
+function normalizeAiringCalendarDays(days) {
+  return (Array.isArray(days) ? days : []).map((day) => ({
+    ...day,
+    items: (Array.isArray(day?.items) ? day.items : []).map((item) => ({
+      ...item,
+      image: globalThis.ImageUrl.secure(item?.image),
+      images: globalThis.ImageUrl.secureSet(item?.images)
+    }))
+  }));
 }
 
 function finiteOrNull(value) {
@@ -4362,6 +4377,10 @@ const app = createApp({
 
     async function publishPost() {
       editorError.value = "";
+      editor.content = globalThis.EditorUtils.latestContent(
+        editor.content,
+        editorInput.value?.value
+      );
       const requestHarunaComment = editor.harunaCommentEnabled;
       const hasContent = Boolean(editor.content.trim());
       const hasImages = editor.images.length > 0;
@@ -4891,6 +4910,7 @@ const app = createApp({
         cache.syncedAt &&
         Date.now() - new Date(cache.syncedAt).getTime() < 6 * 60 * 60 * 1000
       ) {
+        cache.days = normalizeAiringCalendarDays(cache.days);
         airingCalendarDays.value = cache.days;
         return;
       }
@@ -4909,7 +4929,7 @@ const app = createApp({
             summary: item.summary || "",
             air_date: item.air_date,
             air_weekday: item.air_weekday,
-            images: item.images || {},
+            images: globalThis.ImageUrl.secureSet(item.images),
             rating: item.rating ? { score: item.rating.score, total: item.rating.total } : null,
             collection: item.collection || {}
           }))
