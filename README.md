@@ -1,6 +1,6 @@
 # 苞谷米手帐本/bangumi手帐本
 
-[![CI](https://github.com/hgzf/bgm-local-blog/actions/workflows/ci.yml/badge.svg)](https://github.com/hgzf/bgm-local-blog/actions/workflows/ci.yml)
+[![CI](https://github.com/hgzf/bangumi-blog/actions/workflows/ci.yml/badge.svg)](https://github.com/hgzf/bangumi-blog/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-F09199.svg)](LICENSE)
 
 一个纯本地运行的 Bangumi 个人博客、碎碎念和追番档案桌面及 Android 客户端。应用使用 Electron、Capacitor、Vue 3、Tailwind CSS、Marked.js 和 DOMPurify。
