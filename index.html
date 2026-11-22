@@ -576,26 +576,39 @@
             </label>
           </div>
 
-          <div v-if="filteredSubjects.length" class="subject-grid">
-            <button v-for="subject in filteredSubjects" :key="subject.key" class="subject-card" type="button" @click="openSubjectDetail(subject)">
-              <img v-if="subject.image" class="subject-cover" :src="subject.image" :alt="subject.name" loading="lazy">
-              <span v-else class="subject-cover empty">暂无封面</span>
-              <span class="subject-card-copy">
-                <strong>{{ subject.name }}</strong>
-                <span class="subject-card-meta">
-                  <span>{{ subjectTypeLabel(subject.type) }}</span>
-                  <span>{{ collectionStatusLabel(subject.status, subject.type) }}</span>
+          <template v-if="filteredSubjects.length">
+            <div class="subject-grid">
+              <button
+                v-for="subject in displayedSubjects"
+                :key="subject.key"
+                v-memo="[subject.key, subject.name, subject.image, subject.type, subject.status, subject.episode, subject.epTotal, subject.myScore]"
+                class="subject-card"
+                type="button"
+                @click="openSubjectDetail(subject)"
+              >
+                <img v-if="subject.image" class="subject-cover" :src="subject.image" :alt="subject.name" loading="lazy" decoding="async">
+                <span v-else class="subject-cover empty">暂无封面</span>
+                <span class="subject-card-copy">
+                  <strong>{{ subject.name }}</strong>
+                  <span class="subject-card-meta">
+                    <span>{{ subjectTypeLabel(subject.type) }}</span>
+                    <span>{{ collectionStatusLabel(subject.status, subject.type) }}</span>
+                  </span>
+                  <span v-if="subject.epTotal" class="progress-track" aria-hidden="true">
+                    <span class="progress-fill" :style="{ width: progressPercent(subject) + '%' }"></span>
+                  </span>
+                  <span class="subject-card-meta">
+                    <span>{{ subject.episode !== null && subject.episode !== undefined ? `EP ${subject.episode}` : "未记录进度" }}</span>
+                    <span>{{ subject.myScore ? `${subject.myScore}/10` : "未评分" }}</span>
+                  </span>
                 </span>
-                <span v-if="subject.epTotal" class="progress-track" aria-hidden="true">
-                  <span class="progress-fill" :style="{ width: progressPercent(subject) + '%' }"></span>
-                </span>
-                <span class="subject-card-meta">
-                  <span>{{ subject.episode !== null && subject.episode !== undefined ? `EP ${subject.episode}` : "未记录进度" }}</span>
-                  <span>{{ subject.myScore ? `${subject.myScore}/10` : "未评分" }}</span>
-                </span>
-              </span>
-            </button>
-          </div>
+              </button>
+            </div>
+            <div v-if="hiddenSubjectCount" class="timeline-load-more subject-load-more">
+              <span>已显示 {{ displayedSubjects.length }} / {{ filteredSubjects.length }} 部</span>
+              <button class="button small" type="button" @click="showMoreSubjects">再显示 {{ Math.min(hiddenSubjectCount, subjectPageSize) }} 部</button>
+            </div>
+          </template>
           <div v-else class="panel empty-state">
             <strong>{{ database.collections.length ? "当前筛选没有作品" : "还没有同步收藏" }}</strong>
             <p>{{ database.collections.length ? "调整作品类型或收藏状态筛选即可。" : "在系统设置中填写 Bangumi 用户名或 Access Token。同步会循环拉取全部收藏，不受单页 50 部限制。" }}</p>

@@ -1281,6 +1281,12 @@ button.tag:hover {
   border-radius: 4px;
   text-align: left;
   cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: 142px 280px;
+}
+
+.subject-load-more {
+  margin-top: 10px;
 }
 
 .subject-card:hover {

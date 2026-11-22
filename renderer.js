@@ -686,6 +686,9 @@ const app = createApp({
     const showAllAiring = ref(false);
     const subjectTypeFilter = ref("2");
     const subjectStatusFilter = ref("all");
+    const subjectPageSize = 60;
+    const visibleSubjectLimit = ref(subjectPageSize);
+    let deferredRecommendationTimer = null;
     const appClock = ref(new Date());
     const yearbookYear = ref(appClock.value.getFullYear());
     const yearbookComparisonYear = ref(appClock.value.getFullYear() - 1);
@@ -1612,9 +1615,29 @@ const app = createApp({
       });
     });
 
+    const displayedSubjects = computed(() =>
+      filteredSubjects.value.slice(0, visibleSubjectLimit.value)
+    );
+
+    const hiddenSubjectCount = computed(() =>
+      Math.max(0, filteredSubjects.value.length - displayedSubjects.value.length)
+    );
+
+    watch(
+      [subjectTypeFilter, subjectStatusFilter, searchTerm],
+      () => {
+        visibleSubjectLimit.value = subjectPageSize;
+      }
+    );
+
+    function showMoreSubjects() {
+      visibleSubjectLimit.value += subjectPageSize;
+    }
+
     function setSubjectCategory(value) {
       subjectTypeFilter.value = String(value);
       subjectStatusFilter.value = "all";
+      visibleSubjectLimit.value = subjectPageSize;
     }
 
     function resetSubjectFilters() {
@@ -1622,6 +1645,7 @@ const app = createApp({
       subjectTypeFilter.value = populated?.value || "2";
       subjectStatusFilter.value = "all";
       searchTerm.value = "";
+      visibleSubjectLimit.value = subjectPageSize;
     }
 
     const watchingSubjects = computed(() => {
@@ -4243,6 +4267,26 @@ const app = createApp({
       return collectionStatusLabel(subject.status, subject.type);
     }
 
+    function scheduleQueueRecommendations(force = false) {
+      if (deferredRecommendationTimer) {
+        clearTimeout(deferredRecommendationTimer);
+        deferredRecommendationTimer = null;
+      }
+      const run = () => {
+        deferredRecommendationTimer = null;
+        if (currentTab.value !== "subjects") return;
+        if (!force && queueRecommendationResults.value.length) return;
+        void refreshQueueRecommendations(force);
+      };
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => {
+          deferredRecommendationTimer = setTimeout(run, 120);
+        });
+      } else {
+        deferredRecommendationTimer = setTimeout(run, 120);
+      }
+    }
+
     function setTab(tab) {
       if (tab === "blog") currentArticle.value = null;
       currentTab.value = tab;
@@ -4250,7 +4294,10 @@ const app = createApp({
       if (tab === "reviews") void checkScheduledPeriodReports();
       if (tab === "subjects") {
         void loadAiringCalendar();
-        if (!queueRecommendationResults.value.length) void refreshQueueRecommendations(false);
+        if (!queueRecommendationResults.value.length) scheduleQueueRecommendations(false);
+      } else if (deferredRecommendationTimer) {
+        clearTimeout(deferredRecommendationTimer);
+        deferredRecommendationTimer = null;
       }
       const viewLines = {
         timeline: "即时博客把碎碎念和长文放在一起，今天也留一句吧。",
@@ -5710,6 +5757,10 @@ const app = createApp({
       subjectFinding,
       allSubjects,
       filteredSubjects,
+      displayedSubjects,
+      hiddenSubjectCount,
+      subjectPageSize,
+      showMoreSubjects,
       subjectCategoryCounts,
       subjectCategories,
       currentSubjectCategoryLabel,
