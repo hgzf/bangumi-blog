@@ -1,4 +1,4 @@
-# 苞谷米日志
+# 苞谷米手帐本/bangumi手帐本
 
 [![CI](https://github.com/hgzf/bgm-local-blog/actions/workflows/ci.yml/badge.svg)](https://github.com/hgzf/bgm-local-blog/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-F09199.svg)](LICENSE)
